@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand-Controlled Fireball with Dark Matter Enemies</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            color: white;
+            max-width: 300px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .section-title {
+            color: #FF5722;
+            font-weight: bold;
+            margin-top: 10px;
+            border-bottom: 1px solid #666;
+            padding-bottom: 5px;
+        }
+        button {
+            background: #FF5722;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        button:hover {
+            background: #E64A19;
+        }
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            color: white;
+            z-index: 100;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            color: white;
+            z-index: 200;
+        }
+        .slider-container {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            color: white;
+        }
+        #hand-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            z-index: 100;
+            max-width: 300px;
+        }
+        #audio-controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            z-index: 100;
+            max-width: 300px;
+        }
+        button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="section-title">Fire Controls</div>
+        <div class="slider-container">
+            <label for="lightCount">Flame Count:</label>
+            <input type="range" id="lightCount" min="0" max="20" step="0.5" value="12">
+            <span id="count-display">12</span>
+        </div>
+        <div class="slider-container">
+            <label for="lightIntensity">Flame Intensity:</label>
+            <input type="range" id="lightIntensity" min="0.1" max="2" step="0.1" value="0.7">
+        </div>
+        <div class="slider-container">
+            <label for="glowStrength">Heat Strength:</label>
+            <input type="range" id="glowStrength" min="0.1" max="2" step="0.1" value="0.7">
+        </div>
+        <div class="slider-container">
+            <label for="glowThickness">Flame Size:</label>
+            <input type="range" id="glowThickness" min="0.01" max="0.5" step="0.01" value="0.1">
+        </div>
+        <div class="slider-container">
+            <label for="videoOpacity">Video Opacity:</label>
+            <input type="range" id="videoOpacity" min="0" max="1" step="0.1" value="1">
+        </div>
+        <div class="slider-container">
+            <label for="flowStrength">Flow Strength:</label>
+            <input type="range" id="flowStrength" min="0" max="2" step="0.01" value="0.8">
+        </div>
+        <div class="section-title">Particle Controls</div>
+        <div class="slider-container">
+            <label for="fireballParticleCount">Fireball Particle Count:</label>
+            <input type="range" id="fireballParticleCount" min="1" max="10" step="1" value="6">
+        </div>
+        <div class="slider-container">
+            <label for="fireballParticleSize">Fireball Particle Size:</label>
+            <input type="range" id="fireballParticleSize" min="0.01" max="0.1" step="0.01" value="0.02">
+        </div>
+        <div class="slider-container">
+            <label for="spatialDustIntensity">Spatial Dust Intensity:</label>
+            <input type="range" id="spatialDustIntensity" min="0.0" max="100.0" step="0.01" value="0.3">
+        </div>
+        <div class="slider-container">
+            <label for="fireballParticleGravity">Fireball Gravity:</label>
+            <input type="range" id="fireballParticleGravity" min="-10.5" max="100.5" step="0.01" value="0.3">
+        </div>
+        <div class="slider-container">
+            <label for="backgroundParticleGravity">Background Gravity:</label>
+            <input type="range" id="backgroundParticleGravity" min="-0.5" max="0.5" step="0.01" value="0.3">
+        </div>
+        <div class="slider-container">
+            <label for="fireballParticleLifetime">Fireball Lifetime:</label>
+            <input type="range" id="fireballParticleLifetime" min="0.5" max="3.0" step="0.1" value="1.5">
+        </div>
+        <div class="slider-container">
+            <label for="backgroundParticleLifetime">Background Lifetime:</label>
+            <input type="range" id="backgroundParticleLifetime" min="1.0" max="5.0" step="0.1" value="2.0">
+        </div>
+        <div class="slider-container">
+            <label for="fireballParticleVelocity">Fireball Velocity:</label>
+            <input type="range" id="fireballParticleVelocity" min="0.5" max="2.0" step="0.01" value="1.0">
+        </div>
+        <div class="slider-container">
+            <label for="backgroundParticleVelocity">Background Velocity:</label>
+            <input type="range" id="backgroundParticleVelocity" min="0.5" max="2.0" step="0.01" value="1.0">
+        </div>
+        <div class="slider-container">
+            <label for="fireballVariation">Fireball Variation:</label>
+            <input type="range" id="fireballVariation" min="0.0" max="1.0" step="0.01" value="0.5">
+        </div>
+        <div class="slider-container">
+            <label for="plasmaArcIntensity">Plasma Arc Intensity:</label>
+            <input type="range" id="plasmaArcIntensity" min="0.0" max="1.0" step="0.01" value="0.5">
+        </div>
+        <div class="slider-container">
+            <label for="plasmaArcLifetime">Plasma Arc Lifetime:</label>
+            <input type="range" id="plasmaArcLifetime" min="0.5" max="2.0" step="0.1" value="1.0">
+        </div>
+        <div class="section-title">Enemy Controls</div>
+        <div class="slider-container">
+            <label for="enemySpawnRate">Enemy Spawn Rate:</label>
+            <input type="range" id="enemySpawnRate" min="1" max="10" step="0.5" value="3">
+        </div>
+        <div class="slider-container">
+            <label for="enemySpeed">Enemy Speed:</label>
+            <input type="range" id="enemySpeed" min="0.1" max="1.0" step="0.01" value="0.3">
+        </div>
+    </div>
+    
+    <div id="hand-info">
+        <div class="section-title">Hand Tracking</div>
+        <div>Left Hand: <span id="left-hand-status">Not detected</span></div>
+        <div>Right Hand: <span id="right-hand-status">Not detected</span></div>
+        <div>Gesture: <span id="gesture-info">None</span></div>
+    </div>
+    
+    <div id="audio-controls">
+        <div class="section-title">Audio Controls</div>
+        <div class="slider-container">
+            <label for="masterVolume">Volume:</label>
+            <input type="range" id="masterVolume" min="0" max="1" step="0.01" value="0.5">
+        </div>
+        <div class="slider-container">
+            <label for="bassBoost">Bass Boost:</label>
+            <input type="range" id="bassBoost" min="0" max="20" step="0.1" value="0">
+        </div>
+        <div class="slider-container">
+            <label for="binauralFreq">Binaural Freq:</label>
+            <input type="range" id="binauralFreq" min="1" max="30" step="0.1" value="7.83">
+            <span id="binaural-display">7.83 Hz</span>
+        </div>
+        <button id="toggleAudio">Enable Audio</button>
+    </div>
+    
+    <div id="info">Initializing...</div>
+    <div id="loading">Loading hand tracking and creating visualizer...</div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection@latest/dist/hand-pose-detection.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@latest/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <script>
+        let lightCount = 12;
+        let lightIntensity = 0.7;
+        let glowStrength = 0.7;
+        let glowThickness = 0.1;
+        let videoOpacity = 1;
+        let flowStrength = 0.8;
+        let fireballParticleCount = 6;
+        let fireballParticleSize = 0.02;
+        let spatialDustIntensity = 0.3;
+        let fireballParticleGravity = 0.3;
+        let backgroundParticleGravity = 0.3;
+        let fireballParticleLifetime = 1.5;
+        let backgroundParticleLifetime = 2.0;
+        let fireballParticleVelocity = 1.0;
+        let backgroundParticleVelocity = 1.0;
+        let fireballVariation = 0.5;
+        let plasmaArcIntensity = 0.5;
+        let plasmaArcLifetime = 1.0;
+        let enemySpawnRate = 3.0;
+        let enemySpeed = 0.3;
+        let time = 0;
+        
+        let handDetector;
+        let video;
+        let leftHandPosition = { x: 0, y: 0, z: 0 };
+        let rightHandPosition = { x: 0, y: 0, z: 0 };
+        let leftHandVelocity = { x: 0, y: 0 };
+        let rightHandVelocity = { x: 0, y: 0 };
+        let leftHandDetected = false;
+        let rightHandDetected = false;
+        let lastGestureTime = 0;
+        let currentGesture = 'none';
+        let lastLeftHandPos = { x: 0, y: 0 };
+        let lastRightHandPos = { x: 0, y: 0 };
+        let flowField = { x: 0, y: 0 };
+        let fireball = { active: false, pos: { x: 0, y: 0 }, time: 0, handedness: '', velocity: { x: 0, y: 0 } };
+        let lastThumbPos = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } };
+        let thumbVelocityHistory = { left: [], right: [] };
+        let lastDetectTime = performance.now();
+        let enemies = [];
+        let explosions = [];
+        let nextSpawnTime = 0;
+        
+        let scene, camera, renderer;
+        let material, mesh;
+        let videoTexture;
+        let shaderUniforms;
+        let lastAnimateTime = performance.now();
+
+        let audioContext;
+        let masterGain;
+        let analyser;
+        let audioData;
+        let binauralOscLeft, binauralOscRight;
+        let binauralGainLeft, binauralGainRight;
+        let bassFilter;
+        let binauralFreq = 7.83;
+        let audioEnabled = false;
+        
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = null;
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 1;
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+        }
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720, facingMode: 'user' }
+                });
+                video = document.createElement('video');
+                video.srcObject = stream;
+                video.playsInline = true;
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = resolve;
+                    video.play().catch(console.error);
+                });
+                videoTexture = new THREE.VideoTexture(video);
+                videoTexture.minFilter = THREE.LinearFilter;
+                videoTexture.magFilter = THREE.LinearFilter;
+                updateInfo('Camera initialized successfully');
+                return true;
+            } catch (error) {
+                console.error('Camera initialization failed:', error);
+                const canvas = document.createElement('canvas');
+                canvas.width = 16;
+                canvas.height = 9;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'rgba(0,0,0,0)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                videoTexture = new THREE.CanvasTexture(canvas);
+                updateInfo('Camera access failed - using default background');
+                return false;
+            }
+        }
+
+        function setupNeonShader() {
+            const vertexShader = `
+                varying vec2 vUv;
+                varying vec2 vOriginalUv;
+                varying vec3 vPosition;
+                uniform float time;
+                uniform float fireballActive;
+                uniform vec2 fireballPos;
+                uniform float fireballTime;
+
+                float random(vec2 st) {
+                    return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+                }
+
+                float noise(vec2 st) {
+                    vec2 i = floor(st);
+                    vec2 f = fract(st);
+                    float a = random(i);
+                    float b = random(i + vec2(1.0, 0.0));
+                    float c = random(i + vec2(0.0, 1.0));
+                    float d = random(i + vec2(1.0, 1.0));
+                    vec2 u = f * f * (3.0 - 2.0 * f);
+                    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+                }
+
+                float fbm(vec2 st) {
+                    float value = 0.0;
+                    float amplitude = 0.5;
+                    for (int i = 0; i < 4; i++) {
+                        value += amplitude * noise(st);
+                        st *= 2.0;
+                        amplitude *= 0.5;
+                    }
+                    return value;
+                }
+
+                void main() {
+                    vUv = uv;
+                    vOriginalUv = uv;
+                    vPosition = position;
+                    vec3 displacedPosition = position;
+
+                    if (fireballActive > 0.5) {
+                        vec2 uvWorld = uv * 2.0 - 1.0;
+                        uvWorld.x *= ${window.innerWidth / window.innerHeight};
+                        float dist = length(uvWorld - fireballPos);
+                        float waveStrength = smoothstep(0.4, 0.0, dist) * 0.05 * (1.0 + 0.3 * sin(fireballTime * 5.0));
+                        float wave = fbm(vec2(uv.x * 3.0 + time * 0.7, uv.y * 3.0)) * waveStrength;
+                        displacedPosition.x += wave;
+                        displacedPosition.y += wave * 0.5;
+                    }
+
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(displacedPosition, 1.0);
+                }
+            `;
+
+            const fragmentShader = `
+                uniform sampler2D uTexture;
+                uniform float time;
+                uniform float aspectRatio;
+                uniform int lightCount;
+                uniform float lightIntensity;
+                uniform float glowStrength;
+                uniform float glowThickness;
+                uniform float videoOpacity;
+                uniform float flowStrength;
+                uniform float leftHandDetected;
+                uniform float rightHandDetected;
+                uniform vec2 leftHandPos;
+                uniform vec2 rightHandPos;
+                uniform vec2 flowField;
+                uniform float fireballActive;
+                uniform vec2 fireballPos;
+                uniform float fireballTime;
+                uniform float audioLevel;
+                uniform float bassLevel;
+                uniform int fireballParticleCount;
+                uniform float fireballParticleSize;
+                uniform float spatialDustIntensity;
+                uniform float fireballParticleGravity;
+                uniform float backgroundParticleGravity;
+                uniform float fireballParticleLifetime;
+                uniform float backgroundParticleLifetime;
+                uniform float fireballParticleVelocity;
+                uniform float backgroundParticleVelocity;
+                uniform float fireballVariation;
+                uniform float plasmaArcIntensity;
+                uniform float plasmaArcLifetime;
+                uniform int enemyCount;
+                uniform vec2 enemyPositions[5];
+                uniform int explosionCount;
+                uniform vec2 explosionPositions[5];
+                uniform float explosionTimes[5];
+                varying vec2 vUv;
+                varying vec2 vOriginalUv;
+                varying vec3 vPosition;
+
+                float random(vec2 st) {
+                    return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+                }
+
+                float noise(vec2 st) {
+                    vec2 i = floor(st);
+                    vec2 f = fract(st);
+                    float a = random(i);
+                    float b = random(i + vec2(1.0, 0.0));
+                    float c = random(i + vec2(0.0, 1.0));
+                    float d = random(i + vec2(1.0, 1.0));
+                    vec2 u = f * f * (3.0 - 2.0 * f);
+                    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+                }
+
+                float fbm(vec2 st) {
+                    float value = 0.0;
+                    float amplitude = 0.5;
+                    for (int i = 0; i < 6; i++) {
+                        value += amplitude * noise(st);
+                        st *= 2.0;
+                        amplitude *= 0.5;
+                    }
+                    return value;
+                }
+
+                vec2 applyFlow(vec2 pos, vec2 flow, float dist) {
+                    float flowEffect = flowStrength * exp(-dist * 3.0);
+                    return pos + flow * flowEffect * 0.2;
+                }
+
+                float fireShape(vec2 p, vec2 center, float size, float audioMod, vec2 flow, float lifetime, float iFloat) {
+                    float cycleTime = mod(time, lifetime);
+                    vec2 cycledPos = center;
+                    cycledPos.y += backgroundParticleVelocity * cycleTime + 0.5 * backgroundParticleGravity * cycleTime * cycleTime;
+                    cycledPos.x += sin(time * (1.0 + iFloat * 0.15)) * 0.1 * backgroundParticleVelocity;
+                    float d = length(p - cycledPos);
+                    float n = fbm(p * 4.0 + vec2(0.0, time * 0.8));
+                    float flame = d - size * (1.0 + 0.6 * (p.y - cycledPos.y));
+                    flame += n * 0.3 * size * audioMod;
+                    float taper = 1.0 - smoothstep(-size, size, p.y - cycledPos.y);
+                    float flowInfluence = length(flow) * flowStrength;
+                    flame += flowInfluence * sin(p.y * 8.0) * 0.15;
+                    return flame * taper;
+                }
+
+                float fireballShape(vec2 p, vec2 center, float size) {
+                    float d = length(p - center);
+                    float n = fbm(p * 6.0 + vec2(time * 1.5));
+                    return d - size * (1.0 + n * 0.3);
+                }
+
+                float spatialDustShape(vec2 p, vec2 center, float seed) {
+                    float cycleTime = mod(time + seed * 10.0, 2.0);
+                    vec2 dustPos = center + vec2(
+                        sin(seed * 123.456 + time * 0.5) * 0.3,
+                        cos(seed * 78.912 + time * 0.5) * 0.3
+                    );
+                    float twinkle = sin(time * 5.0 + seed * 456.789) * 0.5 + 0.5;
+                    float d = length(p - dustPos);
+                    return d - 0.005 * (0.5 + twinkle * 0.5);
+                }
+
+                float plasmaArcShape(vec2 p, vec2 center, float arcTime, float seed, float lifetime) {
+                    float t = arcTime / lifetime;
+                    vec2 arcDir = vec2(
+                        sin(seed * 123.456 + time * 2.0) * 0.3,
+                        cos(seed * 78.912 + time * 2.0) * 0.3 + 0.2
+                    );
+                    float n = fbm(vec2(t * 5.0 + seed, time * 1.5));
+                    vec2 acc = vec2(0.0, fireballParticleGravity);
+                    vec2 arcPos = center + arcDir * t * 1.2 + 0.5 * acc * t * t;
+                    arcPos += vec2(
+                        sin(t * 10.0 + seed) * 0.1 * n,
+                        cos(t * 10.0 + seed) * 0.1 * n
+                    );
+                    float d = length(p - arcPos);
+                    return d - 0.005;
+                }
+
+                float enemyShape(vec2 p, vec2 center, float size) {
+                    float d = length(p - center);
+                    float n = fbm(p * 10.0 + vec2(time * 2.0));
+                    return d - size * (1.0 + n * 0.2);
+                }
+
+                float explosionShape(vec2 p, vec2 center, float size, float expTime) {
+                    float d = length(p - center);
+                    float n = fbm(p * 8.0 + vec2(time * 3.0));
+                    return d - size * (1.0 + 0.5 * sin(expTime * 10.0) + n * 0.4);
+                }
+
+                float fireGlow(float d, float str, float thickness) {
+                    return thickness / pow(max(d, 0.001), str);
+                }
+
+                vec2 heatDistortion(vec2 uv, vec2 center, float intensity) {
+                    float n = fbm(uv * 5.0 + time * 0.5);
+                    vec2 offset = vec2(n * 0.02, n * 0.01) * intensity;
+                    return uv + offset;
+                }
+
+                void main() {
+                    vec2 uv = vUv * 2.0 - 1.0;
+                    uv.x *= aspectRatio;
+                    vec2 videoUv = vOriginalUv;
+
+                    float audioMod = 1.0 + audioLevel * 2.0;
+                    float bassMod = 1.0 + bassLevel * 0.5;
+
+                    vec3 fireColor = vec3(0.0);
+                    vec4 videoColor = texture2D(uTexture, videoUv);
+                    videoColor.a *= videoOpacity;
+
+                    for (int i = 0; i < 20; i++) {
+                        if (i >= lightCount) break;
+                        
+                        float iFloat = float(i);
+                        float speed = 0.5 + iFloat * 0.03;
+                        float size = (0.15 + 0.07 * sin(time * 0.7 + iFloat)) * audioMod;
+                        
+                        vec2 flamePos;
+                        if (i == 0 && leftHandDetected > 0.5) {
+                            flamePos = leftHandPos;
+                        } else if (i == 1 && rightHandDetected > 0.5) {
+                            flamePos = rightHandPos;
+                        } else {
+                            flamePos = vec2(
+                                sin(time * speed + iFloat * 1.2) * (0.5 + 0.3 * sin(time * 0.3)),
+                                cos(time * speed * 0.8 + iFloat * 1.5) * (0.5 + 0.3 * cos(time * 0.4))
+                            );
+                        }
+
+                        float distToLeft = leftHandDetected > 0.5 ? length(flamePos - leftHandPos) : 1.0;
+                        float distToRight = rightHandDetected > 0.5 ? length(flamePos - rightHandPos) : 1.0;
+                        vec2 flow = flowField * (1.0 / (1.0 + min(distToLeft, distToRight)));
+                        flamePos = applyFlow(flamePos, flow, min(distToLeft, distToRight));
+
+                        float upwardVelocity = backgroundParticleGravity * backgroundParticleVelocity;
+                        if (fireballActive > 0.5) {
+                            vec2 flameWorldPos = flamePos;
+                            flameWorldPos.x *= aspectRatio;
+                            float distToFireball = length(flameWorldPos - fireballPos);
+                            float fireballInfluence = smoothstep(0.5, 0.0, distToFireball) * 0.2;
+                            upwardVelocity += fireballInfluence * (1.0 + 0.3 * sin(fireballTime * 5.0)) * backgroundParticleVelocity;
+                        }
+
+                        vec2 distortedUV = heatDistortion(uv, flamePos, glowStrength * 0.5);
+                        float flame = fireShape(distortedUV, flamePos, size * bassMod, audioMod, flow, backgroundParticleLifetime, iFloat);
+                        float g = fireGlow(flame, glowStrength, glowThickness) * lightIntensity * audioMod;
+
+                        vec3 flameColor = mix(
+                            vec3(1.0, 0.2, 0.0),
+                            vec3(1.0, 0.9, 0.4),
+                            smoothstep(-0.2, 0.2, flame)
+                        );
+                        flameColor = mix(
+                            vec3(0.2, 0.4, 1.0),
+                            flameColor,
+                            smoothstep(-0.3, 0.0, flame)
+                        );
+
+                        float ember = fbm(distortedUV * 10.0 + vec2(time * 2.0, time * 3.0));
+                        ember = smoothstep(0.7, 0.9, ember) * 0.3 * bassMod;
+                        vec3 emberColor = vec3(1.0, 0.6, 0.2) * ember;
+
+                        if (distortedUV.y > flamePos.y + size * 0.7) {
+                            float smoke = fbm(distortedUV * 3.0 + vec2(0.0, time * 0.2));
+                            float smokeIntensity = exp(-(distortedUV.y - flamePos.y - size * 0.7) * 3.0);
+                            flameColor = mix(
+                                vec3(0.3, 0.3, 0.3),
+                                flameColor,
+                                smokeIntensity
+                            );
+                            g *= smokeIntensity * 0.4;
+                        }
+
+                        fireColor += g * flameColor + emberColor;
+                    }
+
+                    // Fireball effect with random brightness and color variation
+                    if (fireballActive > 0.5) {
+                        float fireballSize = 0.2 * smoothstep(0.0, 0.5, fireballTime) * (1.0 + 0.2 * sin(fireballTime * 5.0));
+                        vec2 fireballUV = heatDistortion(uv, fireballPos, glowStrength * 0.8);
+                        float fireball = fireballShape(fireballUV, fireballPos, fireballSize);
+                        float variation = fbm(vec2(fireballTime * 2.0, fireballPos.x + fireballPos.y)) * fireballVariation;
+                        float fireballIntensity = lightIntensity * 2.0 * (1.0 + 0.3 * sin(fireballTime * 8.0) + variation * 0.5);
+                        float fireballGlow = fireGlow(fireball, glowStrength * 0.8, glowThickness * 2.0) * fireballIntensity;
+                        float fireballFade = smoothstep(2.0, 0.0, fireballTime);
+                        vec3 fireballColor = mix(
+                            vec3(1.0, 0.5, 0.0),
+                            vec3(1.0, 1.0, 0.6 + variation * 0.4),
+                            smoothstep(-0.2, 0.2, fireball) + sin(fireballTime * 3.0) * 0.3 * fireballVariation
+                        );
+                        fireColor += fireballGlow * fireballColor * fireballFade;
+
+                        // Particle emission system with configurable count, size, gravity, lifetime, and velocity
+                        for (int i = 0; i < 10; i++) {
+                            if (i >= fireballParticleCount) break;
+                            float iFloat = float(i);
+                            float seed = iFloat * 123.456;
+                            vec2 initialVel = vec2(
+                                sin(seed + time) * 0.15 * fireballParticleVelocity + flowField.x * 0.05,
+                                cos(seed + time) * 0.1 * fireballParticleVelocity + flowField.y * 0.05
+                            );
+                            vec2 acc = vec2(0.0, fireballParticleGravity);
+                            float particleTime = mod(fireballTime + iFloat * 0.3, fireballParticleLifetime);
+                            float particleFade = smoothstep(fireballParticleLifetime, fireballParticleLifetime * 0.5, particleTime);
+                            vec2 particlePos = fireballPos + initialVel * particleTime + 0.5 * acc * particleTime * particleTime;
+                            float particle = length(fireballUV - particlePos) - fireballParticleSize * (0.5 + fbm(fireballUV * 8.0 + vec2(time * 2.0)) * 0.1);
+                            float particleGlow = fireGlow(particle, glowStrength * 0.6, glowThickness * 0.6) * lightIntensity;
+                            vec3 particleColor = vec3(1.0, 0.6, 0.2) * particleGlow * particleFade * fireballFade;
+                            fireColor += particleColor;
+                        }
+
+                        // Spatial dust effect
+                        for (int i = 0; i < 20; i++) {
+                            float iFloat = float(i);
+                            float seed = iFloat * 789.123;
+                            float dust = spatialDustShape(fireballUV, fireballPos, seed);
+                            float distToFireball = length(fireballUV - fireballPos);
+                            float dustFade = smoothstep(0.5, 0.2, distToFireball);
+                            float dustGlow = fireGlow(dust, glowStrength * 0.4, glowThickness * 0.4) * spatialDustIntensity * dustFade;
+                            vec3 dustColor = vec3(0.8, 0.8, 1.0) * dustGlow * fireballFade;
+                            fireColor += dustColor;
+                        }
+
+                        // Plasma arcs emission with alternating blue and red colors
+                        for (int i = 0; i < 4; i++) {
+                            float iFloat = float(i);
+                            float seed = iFloat * 456.789;
+                            float arcTime = mod(fireballTime + iFloat * 0.2, plasmaArcLifetime);
+                            float arcFade = smoothstep(plasmaArcLifetime, plasmaArcLifetime * 0.5, arcTime);
+                            float arc = plasmaArcShape(fireballUV, fireballPos, arcTime, seed, plasmaArcLifetime);
+                            float arcGlow = fireGlow(arc, glowStrength * 0.5, glowThickness * 0.5) * plasmaArcIntensity;
+                            vec3 arcColor = i < 2 ? vec3(0.6, 0.8, 1.0) : vec3(1.0, 0.2, 0.2);
+                            arcColor *= arcGlow * arcFade * fireballFade;
+                            fireColor += arcColor;
+                        }
+                    }
+
+                    // Dark matter enemies
+                    for (int i = 0; i < 5; i++) {
+                        if (i >= enemyCount) break;
+                        vec2 ePos = enemyPositions[i];
+                        ePos.x *= aspectRatio;
+                        float enemy = enemyShape(uv, ePos, 0.05);
+                        float enemyGlow = fireGlow(enemy, glowStrength * 1.2, glowThickness * 0.8) * 0.5;
+                        vec3 enemyColor = vec3(0.1, 0.0, 0.3) * enemyGlow;
+                        fireColor = mix(fireColor, enemyColor, smoothstep(0.05, 0.0, abs(enemy)));
+                        if (enemy < 0.0) {
+                            fireColor *= 0.2; // darken inside
+                        }
+                    }
+
+                    // Explosions
+                    for (int i = 0; i < 5; i++) {
+                        if (i >= explosionCount) break;
+                        vec2 expPos = explosionPositions[i];
+                        expPos.x *= aspectRatio;
+                        float expTime = explosionTimes[i];
+                        float expSize = 0.15 * smoothstep(0.0, 0.3, expTime) * (1.0 - smoothstep(0.7, 1.0, expTime));
+                        float explosion = explosionShape(uv, expPos, expSize, expTime);
+                        float expGlow = fireGlow(explosion, glowStrength * 0.7, glowThickness * 1.5) * lightIntensity * 3.0;
+                        vec3 expColor = mix(vec3(1.0, 0.3, 0.0), vec3(1.0, 0.8, 0.2), sin(expTime * 20.0) * 0.5 + 0.5);
+                        fireColor += expColor * expGlow * (1.0 - expTime);
+                    }
+
+                    fireColor *= 1.0 + 0.15 * sin(time * 12.0) * random(uv + time);
+                    vec3 finalColor = mix(videoColor.rgb, videoColor.rgb + fireColor, 0.7);
+                    gl_FragColor = vec4(finalColor, max(videoColor.a, length(fireColor) * 0.6));
+                }
+            `;
+
+            shaderUniforms = {
+                uTexture: { value: videoTexture },
+                time: { value: 0 },
+                aspectRatio: { value: window.innerWidth / window.innerHeight },
+                lightCount: { value: lightCount },
+                lightIntensity: { value: lightIntensity },
+                glowStrength: { value: glowStrength },
+                glowThickness: { value: glowThickness },
+                videoOpacity: { value: videoOpacity },
+                flowStrength: { value: flowStrength },
+                leftHandDetected: { value: 0 },
+                rightHandDetected: { value: 0 },
+                leftHandPos: { value: new THREE.Vector2(0, 0) },
+                rightHandPos: { value: new THREE.Vector2(0, 0) },
+                flowField: { value: new THREE.Vector2(0, 0) },
+                fireballActive: { value: 0 },
+                fireballPos: { value: new THREE.Vector2(0, 0) },
+                fireballTime: { value: 0 },
+                audioLevel: { value: 0 },
+                bassLevel: { value: 0 },
+                fireballParticleCount: { value: fireballParticleCount },
+                fireballParticleSize: { value: fireballParticleSize },
+                spatialDustIntensity: { value: spatialDustIntensity },
+                fireballParticleGravity: { value: fireballParticleGravity },
+                backgroundParticleGravity: { value: backgroundParticleGravity },
+                fireballParticleLifetime: { value: fireballParticleLifetime },
+                backgroundParticleLifetime: { value: backgroundParticleLifetime },
+                fireballParticleVelocity: { value: fireballParticleVelocity },
+                backgroundParticleVelocity: { value: backgroundParticleVelocity },
+                fireballVariation: { value: fireballVariation },
+                plasmaArcIntensity: { value: plasmaArcIntensity },
+                plasmaArcLifetime: { value: plasmaArcLifetime },
+                enemyCount: { value: 0 },
+                enemyPositions: { value: Array.from({length: 5}, () => new THREE.Vector2(0, 0)) },
+                explosionCount: { value: 0 },
+                explosionPositions: { value: Array.from({length: 5}, () => new THREE.Vector2(0, 0)) },
+                explosionTimes: { value: new Float32Array(5) }
+            };
+
+            material = new THREE.ShaderMaterial({
+                uniforms: shaderUniforms,
+                vertexShader,
+                fragmentShader,
+                transparent: true,
+                blending: THREE.AdditiveBlending
+            });
+
+            const geometry = new THREE.PlaneGeometry(2, 2, 32, 32);
+            mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+        }
+
+        async function initHandTracking() {
+            try {
+                handDetector = await window.handPoseDetection.createDetector(
+                    window.handPoseDetection.SupportedModels.MediaPipeHands,
+                    {
+                        runtime: 'mediapipe',
+                        modelType: 'full',
+                        maxHands: 2,
+                        solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@latest'
+                    }
+                );
+                updateInfo('Hand tracking initialized');
+                detectHands();
+            } catch (error) {
+                console.error('Hand tracking initialization failed:', error);
+                updateInfo('Hand tracking failed - using automatic light movement');
+            }
+        }
+
+        function computeLucasKanadeVelocity(hand, handedness, thumbTip) {
+            const currentPos = {
+                x: thumbTip.x / video.videoWidth * 2 - 1,
+                y: -(thumbTip.y / video.videoHeight * 2 - 1)
+            };
+            const history = thumbVelocityHistory[handedness.toLowerCase()];
+            const lastPos = lastThumbPos[handedness.toLowerCase()];
+            
+            const rawVelocity = {
+                x: (currentPos.x - lastPos.x),
+                y: (currentPos.y - lastPos.y)
+            };
+
+            history.push(rawVelocity);
+            if (history.length > 5) history.shift();
+
+            let smoothedVelocity = { x: 0, y: 0 };
+            let weightSum = 0;
+            history.forEach((v, i) => {
+                const weight = Math.exp(-0.5 * (history.length - 1 - i));
+                smoothedVelocity.x += v.x * weight;
+                smoothedVelocity.y += v.y * weight;
+                weightSum += weight;
+            });
+            if (weightSum > 0) {
+                smoothedVelocity.x /= weightSum;
+                smoothedVelocity.y /= weightSum;
+            }
+
+            lastThumbPos[handedness.toLowerCase()] = currentPos;
+            return smoothedVelocity;
+        }
+
+        async function detectHands() {
+            if (!handDetector || !video) return;
+            const currentDetectTime = performance.now();
+            const dt = (currentDetectTime - lastDetectTime) / 1000;
+            lastDetectTime = currentDetectTime;
+            try {
+                const hands = await handDetector.estimateHands(video);
+                leftHandDetected = false;
+                rightHandDetected = false;
+                shaderUniforms.leftHandDetected.value = 0;
+                shaderUniforms.rightHandDetected.value = 0;
+
+                if (hands.length > 0) {
+                    hands.forEach(hand => {
+                        const { keypoints, handedness } = hand;
+                        const sum = keypoints.reduce((acc, { x, y }) => {
+                            acc.x += x;
+                            acc.y += y;
+                            return acc;
+                        }, { x: 0, y: 0 });
+                        const handPos = {
+                            x: (sum.x / keypoints.length / video.videoWidth) * 2 - 1,
+                            y: -((sum.y / keypoints.length / video.videoHeight) * 2 - 1)
+                        };
+
+                        const rawHandVelX = (handPos.x - (handedness === 'Left' ? lastLeftHandPos.x : lastRightHandPos.x)) / dt;
+                        const rawHandVelY = (handPos.y - (handedness === 'Left' ? lastLeftHandPos.y : lastRightHandPos.y)) / dt;
+
+                        if (handedness === 'Left') {
+                            leftHandDetected = true;
+                            leftHandVelocity.x = rawHandVelX;
+                            leftHandVelocity.y = rawHandVelY;
+                            lastLeftHandPos = handPos;
+                            leftHandPosition = handPos;
+                            shaderUniforms.leftHandPos.value.set(handPos.x, handPos.y);
+                            shaderUniforms.leftHandDetected.value = 1;
+                            document.getElementById('left-hand-status').textContent = 'Detected';
+                        } else {
+                            rightHandDetected = true;
+                            rightHandVelocity.x = rawHandVelX;
+                            rightHandVelocity.y = rawHandVelY;
+                            lastRightHandPos = handPos;
+                            rightHandPosition = handPos;
+                            shaderUniforms.rightHandPos.value.set(handPos.x, handPos.y);
+                            shaderUniforms.rightHandDetected.value = 1;
+                            document.getElementById('right-hand-status').textContent = 'Detected';
+                        }
+                    });
+
+                    updateFlowField();
+                    updateFireballPosition(hands);
+                    detectGestures(hands);
+                } else {
+                    document.getElementById('left-hand-status').textContent = 'Not detected';
+                    document.getElementById('right-hand-status').textContent = 'Not detected';
+                    document.getElementById('gesture-info').textContent = 'None';
+                    currentGesture = 'none';
+                    flowField = { x: 0, y: 0 };
+                    shaderUniforms.flowField.value.set(0, 0);
+                }
+            } catch (error) {
+                console.error('Hand detection error:', error);
+            }
+            requestAnimationFrame(detectHands);
+        }
+
+        function updateFlowField() {
+            let totalVelocity = { x: 0, y: 0 };
+            let count = 0;
+            if (leftHandDetected) {
+                totalVelocity.x += leftHandVelocity.x * 0.1;
+                totalVelocity.y += leftHandVelocity.y * 0.1;
+                count++;
+            }
+            if (rightHandDetected) {
+                totalVelocity.x += rightHandVelocity.x * 0.1;
+                totalVelocity.y += rightHandVelocity.y * 0.1;
+                count++;
+            }
+            if (count > 0) {
+                flowField.x = totalVelocity.x / count * flowStrength;
+                flowField.y = totalVelocity.y / count * flowStrength;
+                flowField.x *= 0.9;
+                flowField.y *= 0.9;
+                shaderUniforms.flowField.value.set(flowField.x, flowField.y);
+            }
+        }
+
+        function updateFireballPosition(hands) {
+            if (!fireball.active) return;
+            hands.forEach(hand => {
+                if (hand.handedness === fireball.handedness) {
+                    const thumbTip = hand.keypoints.find(k => k.name === 'thumb_tip');
+                    if (thumbTip) {
+                        const velocity = computeLucasKanadeVelocity(hand, hand.handedness, thumbTip);
+                        fireball.velocity.x = velocity.x;
+                        fireball.velocity.y = velocity.y;
+                        shaderUniforms.fireballPos.value.set(fireball.pos.x, fireball.pos.y);
+                    }
+                }
+            });
+        }
+
+        function detectGestures(hands) {
+            const now = performance.now();
+            if (now - lastGestureTime < 500) return;
+            hands.forEach(hand => {
+                const { keypoints, handedness } = hand;
+                const thumbTip = keypoints.find(k => k.name === 'thumb_tip');
+                const indexTip = keypoints.find(k => k.name === 'index_finger_tip');
+                const middleTip = keypoints.find(k => k.name === 'middle_finger_tip');
+                if (thumbTip && indexTip && middleTip) {
+                    const dxThumbIndex = thumbTip.x - indexTip.x;
+                    const dyThumbIndex = thumbTip.y - indexTip.y;
+                    const distanceThumbIndex = Math.sqrt(dxThumbIndex * dxThumbIndex + dyThumbIndex * dyThumbIndex);
+                    const dxThumbMiddle = thumbTip.x - middleTip.x;
+                    const dyThumbMiddle = thumbTip.y - middleTip.y;
+                    const distanceThumbMiddle = Math.sqrt(dxThumbMiddle * dxThumbMiddle + dyThumbMiddle * dyThumbMiddle);
+                    const wrist = keypoints.find(k => k.name === 'wrist');
+                    if (wrist) {
+                        const handSize = Math.sqrt(
+                            Math.pow(wrist.x - middleTip.x, 2) + 
+                            Math.pow(wrist.y - middleTip.y, 2)
+                        );
+                        const normalizedDistanceThumbIndex = distanceThumbIndex / handSize;
+                        const normalizedDistanceThumbMiddle = distanceThumbMiddle / handSize;
+                        
+                        if (normalizedDistanceThumbIndex < 0.2) {
+                            const handPos = {
+                                x: (thumbTip.x / video.videoWidth) * 2 - 1,
+                                y: -((thumbTip.y / video.videoHeight) * 2 - 1)
+                            };
+                            fireball.active = true;
+                            fireball.pos = handPos;
+                            fireball.time = 0;
+                            fireball.handedness = handedness;
+                            fireball.velocity = handedness === 'Left' ? { x: leftHandVelocity.x, y: leftHandVelocity.y } : { x: rightHandVelocity.x, y: rightHandVelocity.y };
+                            shaderUniforms.fireballActive.value = 1;
+                            shaderUniforms.fireballPos.value.set(handPos.x, handPos.y);
+                            shaderUniforms.fireballTime.value = 0;
+                            document.getElementById('gesture-info').textContent = `Pinch (${handedness}) - Spawn Fireball`;
+                            lastGestureTime = now;
+                            currentGesture = 'pinch';
+                            if (audioEnabled) {
+                                playFireballSound();
+                            }
+                        } else if (normalizedDistanceThumbIndex > 0.4 && normalizedDistanceThumbMiddle > 0.4) {
+                            const velocity = handedness === 'Left' ? leftHandVelocity : rightHandVelocity;
+                            const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+                            if (speed > 0.5) {
+                                flowStrength = Math.min(2.0, flowStrength + 0.1);
+                                shaderUniforms.flowStrength.value = flowStrength;
+                                document.getElementById('flowStrength').value = flowStrength;
+                                document.getElementById('gesture-info').textContent = `Wave (${handedness}) - Increase flow`;
+                                lastGestureTime = now;
+                                currentGesture = 'wave';
+                                if (audioEnabled) {
+                                    playGestureSound(400);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioContext.createGain();
+                masterGain.gain.value = 0.5;
+                masterGain.connect(audioContext.destination);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.connect(masterGain);
+                audioData = new Uint8Array(analyser.frequencyBinCount);
+                bassFilter = audioContext.createBiquadFilter();
+                bassFilter.type = 'lowpass';
+                bassFilter.frequency.value = 150;
+                bassFilter.Q.value = 1;
+                bassFilter.connect(analyser);
+                setupBinauralBeats();
+                document.getElementById('toggleAudio').textContent = 'Disable Audio';
+                audioEnabled = true;
+                return true;
+            } catch (error) {
+                console.error('Audio initialization failed:', error);
+                return false;
+            }
+        }
+
+        function setupBinauralBeats() {
+            binauralOscLeft = audioContext.createOscillator();
+            binauralOscRight = audioContext.createOscillator();
+            binauralOscLeft.type = 'sine';
+            binauralOscRight.type = 'sine';
+            const baseFreq = 200;
+            binauralOscLeft.frequency.value = baseFreq;
+            binauralOscRight.frequency.value = baseFreq + binauralFreq;
+            binauralGainLeft = audioContext.createGain();
+            binauralGainRight = audioContext.createGain();
+            binauralGainLeft.gain.value = 0.1;
+            binauralGainRight.gain.value = 0.1;
+            const pannerLeft = audioContext.createStereoPanner();
+            const pannerRight = audioContext.createStereoPanner();
+            pannerLeft.pan.value = -1;
+            pannerRight.pan.value = 1;
+            binauralOscLeft.connect(binauralGainLeft);
+            binauralOscRight.connect(binauralGainRight);
+            binauralGainLeft.connect(pannerLeft);
+            binauralGainRight.connect(pannerRight);
+            pannerLeft.connect(bassFilter);
+            pannerRight.connect(bassFilter);
+            binauralOscLeft.start();
+            binauralOscRight.start();
+        }
+
+        function updateBinauralFrequency(freq) {
+            if (!audioEnabled || !binauralOscRight) return;
+            binauralFreq = freq;
+            const baseFreq = binauralOscLeft.frequency.value;
+            binauralOscRight.frequency.value = baseFreq + binauralFreq;
+            document.getElementById('binaural-display').textContent = binauralFreq.toFixed(2) + ' Hz';
+        }
+
+        function playGestureSound(freq) {
+            if (!audioEnabled) return;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.value = 0;
+            osc.connect(gain);
+            gain.connect(bassFilter);
+            osc.start();
+            gain.gain.setValueAtTime(0, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+            osc.stop(audioContext.currentTime + 0.6);
+        }
+
+        function playFireballSound() {
+            if (!audioEnabled) return;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 600;
+            gain.gain.value = 0;
+            osc.connect(gain);
+            gain.connect(bassFilter);
+            osc.start();
+            gain.gain.setValueAtTime(0, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.8);
+            osc.stop(audioContext.currentTime + 0.9);
+
+            const bufferSize = audioContext.sampleRate * 0.2;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * 0.2;
+            }
+            const noise = audioContext.createBufferSource();
+            noise.buffer = buffer;
+            const noiseGain = audioContext.createGain();
+            noiseGain.gain.setValueAtTime(0.1, audioContext.currentTime);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+            noise.connect(noiseGain);
+            noiseGain.connect(bassFilter);
+            noise.start();
+            noise.stop(audioContext.currentTime + 0.6);
+        }
+
+        function playExplosionSound() {
+            if (!audioEnabled) return;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.value = 100;
+            gain.gain.value = 0;
+            osc.connect(gain);
+            gain.connect(bassFilter);
+            osc.start();
+            gain.gain.setValueAtTime(0, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.6);
+            osc.stop(audioContext.currentTime + 0.7);
+
+            const bufferSize = audioContext.sampleRate * 0.3;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * 0.3 * (1 - i / bufferSize);
+            }
+            const noise = audioContext.createBufferSource();
+            noise.buffer = buffer;
+            const noiseGain = audioContext.createGain();
+            noiseGain.gain.setValueAtTime(0.2, audioContext.currentTime);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.6);
+            noise.connect(noiseGain);
+            noiseGain.connect(bassFilter);
+            noise.start();
+            noise.stop(audioContext.currentTime + 0.7);
+        }
+
+        function updateAudioAnalysis() {
+            if (!audioEnabled || !analyser) return;
+            analyser.getByteFrequencyData(audioData);
+            let sum = 0;
+            let bassSum = 0;
+            const bassRange = Math.floor(audioData.length * 0.1);
+            for (let i = 0; i < audioData.length; i++) {
+                sum += audioData[i];
+                if (i < bassRange) {
+                    bassSum += audioData[i];
+                }
+            }
+            const avgLevel = sum / (audioData.length * 255);
+            const bassLevel = bassSum / (bassRange * 255);
+            const bassBoost = parseFloat(document.getElementById('bassBoost').value);
+            const boostedBassLevel = bassLevel * (1 + bassBoost);
+            shaderUniforms.audioLevel.value = avgLevel;
+            shaderUniforms.bassLevel.value = boostedBassLevel;
+        }
+
+        function updateInfo(message) {
+            if (message) {
+                document.getElementById('info').textContent = message;
+                return;
+            }
+            document.getElementById('info').textContent = 
+                `Flames: ${lightCount} | Intensity: ${lightIntensity.toFixed(1)} | ` +
+                `Heat: ${glowStrength.toFixed(1)}/${glowThickness.toFixed(2)} | ` +
+                `Flow: ${flowStrength.toFixed(2)} | Video Opacity: ${videoOpacity.toFixed(1)} | ` +
+                `Fireball Particles: ${fireballParticleCount} | Particle Size: ${fireballParticleSize.toFixed(3)} | ` +
+                `Dust Intensity: ${spatialDustIntensity.toFixed(2)} | Fireball Gravity: ${fireballParticleGravity.toFixed(2)} | ` +
+                `Background Gravity: ${backgroundParticleGravity.toFixed(2)} | ` +
+                `Fireball Lifetime: ${fireballParticleLifetime.toFixed(1)}s | Background Lifetime: ${backgroundParticleLifetime.toFixed(1)}s | ` +
+                `Fireball Velocity: ${fireballParticleVelocity.toFixed(2)} | Background Velocity: ${backgroundParticleVelocity.toFixed(2)} | ` +
+                `Fireball Variation: ${fireballVariation.toFixed(2)} | Plasma Arc Intensity: ${plasmaArcIntensity.toFixed(2)} | ` +
+                `Plasma Arc Lifetime: ${plasmaArcLifetime.toFixed(1)}s | Enemies: ${enemies.length}`;
+        }
+
+        async function init() {
+            initThreeJS();
+            const cameraSuccess = await initCamera();
+            setupNeonShader();
+            if (cameraSuccess) {
+                await initHandTracking();
+            }
+            document.getElementById('lightCount').addEventListener('input', (e) => {
+                lightCount = parseInt(e.target.value);
+                shaderUniforms.lightCount.value = lightCount;
+                document.getElementById('count-display').textContent = lightCount;
+                updateInfo();
+            });
+            document.getElementById('lightIntensity').addEventListener('input', (e) => {
+                lightIntensity = parseFloat(e.target.value);
+                shaderUniforms.lightIntensity.value = lightIntensity;
+                updateInfo();
+            });
+            document.getElementById('glowStrength').addEventListener('input', (e) => {
+                glowStrength = parseFloat(e.target.value);
+                shaderUniforms.glowStrength.value = glowStrength;
+                updateInfo();
+            });
+            document.getElementById('glowThickness').addEventListener('input', (e) => {
+                glowThickness = parseFloat(e.target.value);
+                shaderUniforms.glowThickness.value = glowThickness;
+                updateInfo();
+            });
+            document.getElementById('videoOpacity').addEventListener('input', (e) => {
+                videoOpacity = parseFloat(e.target.value);
+                shaderUniforms.videoOpacity.value = videoOpacity;
+                updateInfo();
+            });
+            document.getElementById('flowStrength').addEventListener('input', (e) => {
+                flowStrength = parseFloat(e.target.value);
+                shaderUniforms.flowStrength.value = flowStrength;
+                updateInfo();
+            });
+            document.getElementById('fireballParticleCount').addEventListener('input', (e) => {
+                fireballParticleCount = parseInt(e.target.value);
+                shaderUniforms.fireballParticleCount.value = fireballParticleCount;
+                updateInfo();
+            });
+            document.getElementById('fireballParticleSize').addEventListener('input', (e) => {
+                fireballParticleSize = parseFloat(e.target.value);
+                shaderUniforms.fireballParticleSize.value = fireballParticleSize;
+                updateInfo();
+            });
+            document.getElementById('spatialDustIntensity').addEventListener('input', (e) => {
+                spatialDustIntensity = parseFloat(e.target.value);
+                shaderUniforms.spatialDustIntensity.value = spatialDustIntensity;
+                updateInfo();
+            });
+            document.getElementById('fireballParticleGravity').addEventListener('input', (e) => {
+                fireballParticleGravity = parseFloat(e.target.value);
+                shaderUniforms.fireballParticleGravity.value = fireballParticleGravity;
+                updateInfo();
+            });
+            document.getElementById('backgroundParticleGravity').addEventListener('input', (e) => {
+                backgroundParticleGravity = parseFloat(e.target.value);
+                shaderUniforms.backgroundParticleGravity.value = backgroundParticleGravity;
+                updateInfo();
+            });
+            document.getElementById('fireballParticleLifetime').addEventListener('input', (e) => {
+                fireballParticleLifetime = parseFloat(e.target.value);
+                shaderUniforms.fireballParticleLifetime.value = fireballParticleLifetime;
+                updateInfo();
+            });
+            document.getElementById('backgroundParticleLifetime').addEventListener('input', (e) => {
+                backgroundParticleLifetime = parseFloat(e.target.value);
+                shaderUniforms.backgroundParticleLifetime.value = backgroundParticleLifetime;
+                updateInfo();
+            });
+            document.getElementById('fireballParticleVelocity').addEventListener('input', (e) => {
+                fireballParticleVelocity = parseFloat(e.target.value);
+                shaderUniforms.fireballParticleVelocity.value = fireballParticleVelocity;
+                updateInfo();
+            });
+            document.getElementById('backgroundParticleVelocity').addEventListener('input', (e) => {
+                backgroundParticleVelocity = parseFloat(e.target.value);
+                shaderUniforms.backgroundParticleVelocity.value = backgroundParticleVelocity;
+                updateInfo();
+            });
+            document.getElementById('fireballVariation').addEventListener('input', (e) => {
+                fireballVariation = parseFloat(e.target.value);
+                shaderUniforms.fireballVariation.value = fireballVariation;
+                updateInfo();
+            });
+            document.getElementById('plasmaArcIntensity').addEventListener('input', (e) => {
+                plasmaArcIntensity = parseFloat(e.target.value);
+                shaderUniforms.plasmaArcIntensity.value = plasmaArcIntensity;
+                updateInfo();
+            });
+            document.getElementById('plasmaArcLifetime').addEventListener('input', (e) => {
+                plasmaArcLifetime = parseFloat(e.target.value);
+                shaderUniforms.plasmaArcLifetime.value = plasmaArcLifetime;
+                updateInfo();
+            });
+            document.getElementById('enemySpawnRate').addEventListener('input', (e) => {
+                enemySpawnRate = parseFloat(e.target.value);
+            });
+            document.getElementById('enemySpeed').addEventListener('input', (e) => {
+                enemySpeed = parseFloat(e.target.value);
+            });
+            document.getElementById('masterVolume').addEventListener('input', (e) => {
+                if (masterGain) {
+                    masterGain.gain.value = parseFloat(e.target.value);
+                }
+            });
+            document.getElementById('bassBoost').addEventListener('input', (e) => {
+                updateInfo();
+            });
+            document.getElementById('binauralFreq').addEventListener('input', (e) => {
+                const freq = parseFloat(e.target.value);
+                updateBinauralFrequency(freq);
+            });
+            document.getElementById('toggleAudio').addEventListener('click', () => {
+                if (audioEnabled) {
+                    if (audioContext) {
+                        if (audioContext.state === 'running') {
+                            audioContext.suspend();
+                        }
+                        if (binauralOscLeft) {
+                            binauralOscLeft.stop();
+                            binauralOscRight.stop();
+                        }
+                    }
+                    audioEnabled = false;
+                    document.getElementById('toggleAudio').textContent = 'Enable Audio';
+                } else {
+                    if (!audioContext) {
+                        initAudio();
+                    } else if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                        setupBinauralBeats();
+                    }
+                    audioEnabled = true;
+                    document.getElementById('toggleAudio').textContent = 'Disable Audio';
+                }
+            });
+            document.getElementById('loading').style.display = 'none';
+            nextSpawnTime = time + enemySpawnRate;
+            function animate(t) {
+                requestAnimationFrame(animate);
+                if (!t) t = performance.now();
+                const dt = (t - lastAnimateTime) / 1000;
+                lastAnimateTime = t;
+                time += dt;
+                shaderUniforms.time.value = time;
+                if (fireball.active) {
+                    fireball.velocity.y += fireballParticleGravity * dt;
+                    fireball.pos.x += fireball.velocity.x * dt;
+                    fireball.pos.y += fireball.velocity.y * dt;
+                    fireball.velocity.x *= Math.exp(-0.5 * dt);
+                    fireball.velocity.y *= Math.exp(-0.5 * dt);
+                    shaderUniforms.fireballPos.value.set(fireball.pos.x, fireball.pos.y);
+                    fireball.time += dt;
+                    shaderUniforms.fireballTime.value = fireball.time;
+                    if (fireball.time > 2.0) {
+                        fireball.active = false;
+                        shaderUniforms.fireballActive.value = 0;
+                    }
+                }
+
+                // Spawn enemies
+                if (time > nextSpawnTime) {
+                    let target = leftHandDetected ? leftHandPosition : rightHandDetected ? rightHandPosition : {x: 0, y: 0};
+                    let enemy = {
+                        pos: {x: Math.random() * 2 - 1, y: 1.2},
+                        vel: {x: 0, y: 0}
+                    };
+                    let dx = target.x - enemy.pos.x;
+                    let dy = target.y - enemy.pos.y;
+                    let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    enemy.vel.x = (dx / dist) * enemySpeed;
+                    enemy.vel.y = (dy / dist) * enemySpeed;
+                    enemies.push(enemy);
+                    nextSpawnTime = time + enemySpawnRate + Math.random() * 2 - 1;
+                }
+
+                // Update enemies
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    let enemy = enemies[i];
+                    enemy.pos.x += enemy.vel.x * dt;
+                    enemy.pos.y += enemy.vel.y * dt;
+                    if (enemy.pos.y < -1.2) {
+                        enemies.splice(i, 1);
+                        continue;
+                    }
+                    if (fireball.active) {
+                        let dx = enemy.pos.x - fireball.pos.x;
+                        let dy = enemy.pos.y - fireball.pos.y;
+                        let dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 0.1) {
+                            explosions.push({pos: {x: enemy.pos.x, y: enemy.pos.y}, time: 0});
+                            enemies.splice(i, 1);
+                            playExplosionSound();
+                            // Optionally deactivate fireball or reduce its life
+                            fireball.time += 0.5; // Shorten fireball life
+                            continue;
+                        }
+                    }
+                }
+
+                // Update explosions
+                for (let i = explosions.length - 1; i >= 0; i--) {
+                    explosions[i].time += dt;
+                    if (explosions[i].time > 1.0) {
+                        explosions.splice(i, 1);
+                    }
+                }
+
+                // Update uniforms for enemies and explosions
+                shaderUniforms.enemyCount.value = Math.min(enemies.length, 5);
+                for (let i = 0; i < 5; i++) {
+                    if (i < enemies.length) {
+                        shaderUniforms.enemyPositions.value[i].set(enemies[i].pos.x, enemies[i].pos.y);
+                    }
+                }
+                shaderUniforms.explosionCount.value = Math.min(explosions.length, 5);
+                for (let i = 0; i < 5; i++) {
+                    if (i < explosions.length) {
+                        shaderUniforms.explosionPositions.value[i].set(explosions[i].pos.x, explosions[i].pos.y);
+                        shaderUniforms.explosionTimes.value[i] = explosions[i].time;
+                    }
+                }
+
+                if (videoTexture) {
+                    videoTexture.needsUpdate = true;
+                }
+                updateAudioAnalysis();
+                updateInfo();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            shaderUniforms.aspectRatio.value = window.innerWidth / window.innerHeight;
+        });
+
+        window.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'a':
+                    document.getElementById('toggleAudio').click();
+                    break;
+                case '+':
+                case '=':
+                    lightCount = Math.min(20, lightCount + 1);
+                    shaderUniforms.lightCount.value = lightCount;
+                    document.getElementById('lightCount').value = lightCount;
+                    document.getElementById('count-display').textContent = lightCount;
+                    updateInfo();
+                    break;
+                case '-':
+                    lightCount = Math.max(1, lightCount - 1);
+                    shaderUniforms.lightCount.value = lightCount;
+                    document.getElementById('lightCount').value = lightCount;
+                    document.getElementById('count-display').textContent = lightCount;
+                    updateInfo();
+                    break;
+                case 'f':
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen().catch(console.error);
+                    } else {
+                        if (document.exitFullscreen) {
+                            document.exitFullscreen();
+                        }
+                    }
+                    break;
+            }
+        });
+
+        let touchStartY = 0;
+        window.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) {
+                const touchY = e.touches[0].clientY;
+                const deltaY = touchY - touchStartY;
+                if (Math.abs(deltaY) > 30) {
+                    const newIntensity = Math.max(0.1, Math.min(2, lightIntensity - deltaY * 0.01));
+                    lightIntensity = newIntensity;
+                    shaderUniforms.lightIntensity.value = lightIntensity;
+                    document.getElementById('lightIntensity').value = lightIntensity;
+                    updateInfo();
+                    touchStartY = touchY;
+                }
+            }
+        });
+
+        function setupMicrophoneInput() {
+            if (!audioContext) {
+                initAudio();
+            }
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    const micSource = audioContext.createMediaStreamSource(stream);
+                    micSource.connect(bassFilter);
+                    document.getElementById('toggleAudio').textContent = 'Disable Microphone';
+                    audioEnabled = true;
+                })
+                .catch(err => {
+                    console.error('Microphone access error:', err);
+                    alert('Could not access microphone. Using generated audio instead.');
+                });
+        }
+
+        let lastTap = 0;
+        window.addEventListener('touchend', (e) => {
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            if (tapLength < 300 && tapLength > 0) {
+                setupMicrophoneInput();
+                e.preventDefault();
+            }
+            lastTap = currentTime;
+        });
+
+        function addHandEffects() {
+            if (leftHandDetected && rightHandDetected) {
+                const dx = leftHandPosition.x - rightHandPosition.x;
+                const dy = leftHandPosition.y - rightHandPosition.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const newThickness = 0.05 + distance * 0.2;
+                glowThickness = Math.min(0.5, newThickness);
+                shaderUniforms.glowThickness.value = glowThickness;
+                document.getElementById('glowThickness').value = glowThickness;
+                if (distance < 0.5) {
+                    shaderUniforms.lightIntensity.value = lightIntensity * 2;
+                    if (audioEnabled && audioContext) {
+                        const specialSound = audioContext.createOscillator();
+                        const specialGain = audioContext.createGain();
+                        specialSound.type = 'sawtooth';
+                        specialSound.frequency.value = 150 + (1 - distance) * 300;
+                        specialGain.gain.value = 0;
+                        specialSound.connect(specialGain);
+                        specialGain.connect(bassFilter);
+                        specialSound.start();
+                        specialGain.gain.setValueAtTime(0, audioContext.currentTime);
+                        specialGain.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.1);
+                        specialGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 1.5);
+                        specialSound.stop(audioContext.currentTime + 1.6);
+                    }
+                } else {
+                    shaderUniforms.lightIntensity.value = lightIntensity;
+                }
+            }
+        }
+
+        const originalAnimate = window.requestAnimationFrame;
+        window.requestAnimationFrame = function(callback) {
+            originalAnimate(function(timestamp) {
+                addHandEffects();
+                callback(timestamp);
+            });
+        };
+
+        init();
+    </script>
+</body>
+</html>
+

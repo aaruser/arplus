@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>2D Image to 3D Point Cloud</title>
+    <style>
+        body { margin: 0; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #rightControls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #controls label,
+        #rightControls label {
+            color: white;
+        }
+        #controls input[type="file"],
+        #controls input[type="range"],
+        #controls input[type="number"],
+        #controls button,
+        #controls select,
+        #rightControls input[type="file"],
+        #rightControls input[type="range"],
+        #rightControls input[type="number"],
+        #rightControls button,
+        #rightControls select {
+            width: 150px;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+        #webcamContainer {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2000;
+            background: white;
+            padding: 10px;
+            border: 1px solid black;
+        }
+        #webcamVideo {
+            width: 300px;
+            height: auto;
+        }
+        #asciiOutput {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            background: black;
+            padding: 10px;
+            max-width: 50%;
+            overflow: auto;
+            font-family: monospace;
+            white-space: pre;
+            z-index: 1000;
+            pointer-events: none;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="imageUpload">Import Left Image</label>
+        <input type="file" id="imageUpload" accept="image/*">
+        <label for="overlayUpload">Import Right Image</label>
+        <input type="file" id="overlayUpload" accept="image/*">
+        <label for="videoUpload1">Import Video 1</label>
+        <input type="file" id="videoUpload1" accept="video/*">
+        <label for="videoUpload2">Import Video 2</label>
+        <input type="file" id="videoUpload2" accept="video/*">
+        <button id="playVideo1">Play Video 1</button>
+        <button id="stopVideo1">Stop Video 1</button>
+        <button id="playVideo2">Play Video 2</button>
+        <button id="stopVideo2">Stop Video 2</button>
+        <button id="mixVideos">Mix Videos</button>
+        <label for="pointSize">Point Size</label>
+        <input type="range" id="pointSize" min="0.1" max="5" step="0.1">
+        <label for="topPercentage">Top % for Video 1</label>
+        <input type="range" id="topPercentage" min="0" max="100" step="1" value="50">
+        <label for="videoDuration">Duration (s, max 30)</label>
+        <input type="number" id="videoDuration" min="1" max="30" value="10">
+        <button id="previewVideo">Preview (5s Sample)</button>
+        <button id="generateVideo">Generate Video</button>
+        <button id="capture">Capture View</button>
+        <button id="toggleEdges">Toggle Edges</button>
+        <button id="captureWebcamImage">Capture Webcam Image</button>
+        <button id="startWebcamVideo">Start Webcam Video</button>
+        <button id="stopWebcamVideo">Stop Webcam Video</button>
+        <label for="cameraFacing">Camera Facing</label>
+        <select id="cameraFacing">
+            <option value="user">Selfie (Front)</option>
+            <option value="environment">Rear</option>
+        </select>
+        <button id="renderAscii">Render ASCII Art</button>
+        <button id="pclRender">PCL Render</button>
+        <button id="renderHypergraph">Render Hypergraph</button>
+        <label for="hypergraphIterations">Hypergraph Iterations</label>
+        <input type="range" id="hypergraphIterations" min="1" max="5" step="1" value="1">
+        <button id="stereoRender">Stereo Render</button>
+        <button id="highlightHands">Highlight Hands</button>
+    </div>
+
+    <div id="rightControls">
+        <button id="renderVoxels">Render Voxels</button>
+    </div>
+
+    <pre id="asciiOutput"></pre>
+
+    <div id="webcamContainer">
+        <video id="webcamVideo" autoplay playsinline></video>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pcl.js/dist/pcl.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
+
+    <script>
+        // Setup scene, camera, and renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Add orbit controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+        // Variables
+        let points;
+        let edges;
+        let width, height;
+        let geometry;
+        let originalPositions;
+        let originalColors;
+        let sourceData; // Left image or video
+        let styleDataGlobal; // Right image or overlay
+        let videoElement1, videoElement2;
+        let videoCanvas1, videoCanvas2;
+        let videoCtx1, videoCtx2;
+        let framesData1 = [], framesData2 = [];
+        let isPlayingVideo1 = false;
+        let isPlayingVideo2 = false;
+        let currentFrame1 = 0;
+        let currentFrame2 = 0;
+        let lastFrameTime1 = 0;
+        let lastFrameTime2 = 0;
+        let videoFps = 15; // Reduced for performance
+        let hasImage = false;
+        let recorder;
+        let isGeneratingVideo = false;
+        const maxMemoryPerVideo = 2e9; // 2GB per video for safety
+        let webcamStream;
+        let webcamRecorder;
+        let webcamChunks = [];
+        let isRecordingWebcam = false;
+        let webcamCanvas = document.createElement('canvas');
+        let webcamCtx = webcamCanvas.getContext('2d', { willReadFrequently: true });
+        let isAsciiMode = false;
+        let asciiWidth = 120;
+        let asciiHeight = Math.floor(asciiWidth * (window.innerHeight / window.innerWidth));
+        let asciiTarget = new THREE.WebGLRenderTarget(asciiWidth, asciiHeight);
+        let isPclMode = false;
+        let pclInitialized = false;
+        let handLandmarker;
+        let isHighlightHands = false;
+        const handExaggerateFactor = 2.0; // Factor to exaggerate Z for hands
+        const handDetectionWidth = 320; // Smaller resolution for MediaPipe
+        const handDetectionHeight = 240;
+        let isVoxelMode = false;
+        let voxelsGroup = new THREE.Group();
+        scene.add(voxelsGroup);
+        const voxelSize = 1.0; // Size of each voxel cube
+
+        // Get UI elements
+        const uploadInput = document.getElementById('imageUpload');
+        const overlayInput = document.getElementById('overlayUpload');
+        const videoInput1 = document.getElementById('videoUpload1');
+        const videoInput2 = document.getElementById('videoUpload2');
+        const playVideo1Btn = document.getElementById('playVideo1');
+        const stopVideo1Btn = document.getElementById('stopVideo1');
+        const playVideo2Btn = document.getElementById('playVideo2');
+        const stopVideo2Btn = document.getElementById('stopVideo2');
+        const mixVideosBtn = document.getElementById('mixVideos');
+        const pointSizeInput = document.getElementById('pointSize');
+        const topPercentageInput = document.getElementById('topPercentage');
+        const videoDurationInput = document.getElementById('videoDuration');
+        const previewVideoBtn = document.getElementById('previewVideo');
+        const generateVideoBtn = document.getElementById('generateVideo');
+        const captureBtn = document.getElementById('capture');
+        const toggleEdgesBtn = document.getElementById('toggleEdges');
+        const captureWebcamImageBtn = document.getElementById('captureWebcamImage');
+        const startWebcamVideoBtn = document.getElementById('startWebcamVideo');
+        const stopWebcamVideoBtn = document.getElementById('stopWebcamVideo');
+        const cameraFacingSelect = document.getElementById('cameraFacing');
+        const webcamVideo = document.getElementById('webcamVideo');
+        const webcamContainer = document.getElementById('webcamContainer');
+        const renderAsciiBtn = document.getElementById('renderAscii');
+        const pclRenderBtn = document.getElementById('pclRender');
+        const renderHypergraphBtn = document.getElementById('renderHypergraph');
+        const hypergraphIterationsInput = document.getElementById('hypergraphIterations');
+        const stereoRenderBtn = document.getElementById('stereoRender');
+        const highlightHandsBtn = document.getElementById('highlightHands');
+        const renderVoxelsBtn = document.getElementById('renderVoxels');
+        const asciiOutput = document.getElementById('asciiOutput');
+
+        // Initialize PCL.js
+        async function initPcl() {
+            if (pclInitialized) return;
+            await PCL.init();
+            pclInitialized = true;
+        }
+
+        // Function to apply PCL processing (Statistical Outlier Removal)
+        async function applyPclFilter(apply) {
+            await initPcl();
+            if (!geometry) return;
+
+            if (apply) {
+                if (!originalPositions) {
+                    originalPositions = geometry.getAttribute('position').array.slice();
+                    originalColors = geometry.getAttribute('color').array.slice();
+                }
+
+                const posArray = geometry.getAttribute('position').array;
+                const colorArray = geometry.getAttribute('color').array;
+
+                const cloud = new PCL.PointCloud(PCL.PointXYZRGB);
+                for (let i = 0; i < posArray.length / 3; i++) {
+                    const point = new PCL.PointXYZRGB(posArray[i*3], posArray[i*3+1], posArray[i*3+2], colorArray[i*3]*255, colorArray[i*3+1]*255, colorArray[i*3+2]*255);
+                    cloud.addPoint(point);
+                }
+
+                const sor = new PCL.StatisticalOutlierRemoval(PCL.PointXYZRGB);
+                sor.setInputCloud(cloud);
+                sor.setMeanK(50);
+                sor.setStddevMulThresh(1.0);
+                const cloudFiltered = sor.filter();
+
+                const newPositions = new Float32Array(cloudFiltered.size * 3);
+                const newColors = new Float32Array(cloudFiltered.size * 3);
+                const pointsVec = cloudFiltered.points;
+                for (let i = 0; i < cloudFiltered.size; i++) {
+                    const pt = pointsVec.get(i);
+                    newPositions[i*3] = pt.x;
+                    newPositions[i*3+1] = pt.y;
+                    newPositions[i*3+2] = pt.z;
+                    newColors[i*3] = pt.r / 255;
+                    newColors[i*3+1] = pt.g / 255;
+                    newColors[i*3+2] = pt.b / 255;
+                }
+
+                geometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
+                geometry.setAttribute('color', new THREE.BufferAttribute(newColors, 3));
+            } else {
+                if (originalPositions) {
+                    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(originalPositions), 3));
+                    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(originalColors), 3));
+                }
+            }
+
+            geometry.attributes.position.needsUpdate = true;
+            geometry.attributes.color.needsUpdate = true;
+            if (points) points.geometry = geometry;
+        }
+
+        // Initialize MediaPipe Hand Landmarker
+        async function initHandLandmarker() {
+            try {
+                const { FilesetResolver, HandLandmarker } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0');
+                const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
+                handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+                    },
+                    numHands: 2,
+                    runningMode: "IMAGE" // Default to image, change to video if needed
+                });
+                console.log("Hand Landmarker initialized.");
+            } catch (e) {
+                console.error("Failed to initialize Hand Landmarker:", e);
+            }
+        }
+
+        initHandLandmarker();
+
+        // Function to detect hands and replace points with voxels
+        async function highlightHandsInPointCloud(frameData) {
+            if (!isHighlightHands || !handLandmarker || !geometry) return;
+
+            // Clear previous voxels
+            while (handVoxelsGroup.children.length > 0) {
+                handVoxelsGroup.remove(handVoxelsGroup.children[0]);
+            }
+
+            // Create canvas and put frame data for detection
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = handDetectionWidth;
+            tempCanvas.height = handDetectionHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            const fullCanvas = document.createElement('canvas');
+            fullCanvas.width = width;
+            fullCanvas.height = height;
+            const fullCtx = fullCanvas.getContext('2d');
+            fullCtx.putImageData(new ImageData(frameData, width, height), 0, 0);
+            tempCtx.drawImage(fullCanvas, 0, 0, handDetectionWidth, handDetectionHeight);
+
+            // Get resized image data
+            const resizedImageData = tempCtx.getImageData(0, 0, handDetectionWidth, handDetectionHeight);
+
+            // Create ImageBitmap
+            const bitmap = await createImageBitmap(resizedImageData);
+
+            // Detect hands
+            const results = await handLandmarker.detect(bitmap);
+
+            // Get bounding boxes from landmarks and scale back to original resolution
+            const handBoxes = [];
+            results.landmarks.forEach(hand => {
+                let minX = 1, maxX = 0, minY = 1, maxY = 0;
+                hand.forEach(landmark => {
+                    minX = Math.min(minX, landmark.x);
+                    maxX = Math.max(maxX, landmark.x);
+                    minY = Math.min(minY, landmark.y);
+                    maxY = Math.max(maxY, landmark.y);
+                });
+                // Scale coordinates back to original image size
+                handBoxes.push({
+                    minX: Math.floor(minX * width),
+                    maxX: Math.floor(maxX * width),
+                    minY: Math.floor(minY * height),
+                    maxY: Math.floor(maxY * height)
+                });
+            });
+
+            // Replace points with voxels in hand regions
+            const posArray = geometry.getAttribute('position').array;
+            const colorArray = geometry.getAttribute('color').array;
+            for (let idx = 0; idx < posArray.length / 3; idx++) {
+                const px = Math.floor(posArray[idx * 3] + width / 2);
+                const py = Math.floor(-posArray[idx * 3 + 1] + height / 2);
+
+                let isHandPoint = false;
+                for (const box of handBoxes) {
+                    if (px >= box.minX && px <= box.maxX && py >= box.minY && py <= box.maxY) {
+                        isHandPoint = true;
+                        break;
+                    }
+                }
+
+                if (isHandPoint) {
+                    // Hide original point
+                    posArray[idx * 3 + 2] = 0; // Set Z to 0 to hide
+
+                    // Create voxel (small cube)
+                    const voxelGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+                    const voxelMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(colorArray[idx * 3], colorArray[idx * 3 + 1], colorArray[idx * 3 + 2]) });
+                    const voxel = new THREE.Mesh(voxelGeometry, voxelMaterial);
+                    voxel.position.set(posArray[idx * 3], posArray[idx * 3 + 1], posArray[idx * 3 + 2] + voxelSize / 2); // Slightly offset in Z for visibility
+                    handVoxelsGroup.add(voxel);
+                }
+            }
+            geometry.getAttribute('position').needsUpdate = true;
+        }
+
+        // Toggle hand highlight
+        highlightHandsBtn.addEventListener('click', () => {
+            isHighlightHands = !isHighlightHands;
+            highlightHandsBtn.textContent = isHighlightHands ? 'Disable Hands Highlight' : 'Highlight Hands';
+            // Re-apply on current frame if needed
+            if (isHighlightHands) {
+                const currentFrame = sourceData || (framesData1[currentFrame1] || framesData2[currentFrame2]);
+                if (currentFrame) highlightHandsInPointCloud(currentFrame);
+            } else {
+                // Clear voxels and restore points
+                while (handVoxelsGroup.children.length > 0) {
+                    handVoxelsGroup.remove(handVoxelsGroup.children[0]);
+                }
+                if (originalPositions) {
+                    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(originalPositions), 3));
+                    geometry.attributes.position.needsUpdate = true;
+                }
+            }
+        });
+
+        // New: Voxel render toggle
+        renderVoxelsBtn.addEventListener('click', () => {
+            isVoxelMode = !isVoxelMode;
+            renderVoxelsBtn.textContent = isVoxelMode ? 'Render Points' : 'Render Voxels';
+
+            if (isVoxelMode) {
+                // Switch to voxels
+                scene.remove(points);
+                voxelsGroup = new THREE.Group();
+                const posArray = geometry.getAttribute('position').array;
+                const colorArray = geometry.getAttribute('color').array;
+                for (let idx = 0; idx < posArray.length / 3; idx++) {
+                    if (posArray[idx * 3 + 2] === 0) continue; // Skip hidden points
+
+                    const voxelGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+                    const voxelMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(colorArray[idx * 3], colorArray[idx * 3 + 1], colorArray[idx * 3 + 2]) });
+                    const voxel = new THREE.Mesh(voxelGeometry, voxelMaterial);
+                    voxel.position.set(posArray[idx * 3], posArray[idx * 3 + 1], posArray[idx * 3 + 2]);
+                    voxelsGroup.add(voxel);
+                }
+                scene.add(voxelsGroup);
+            } else {
+                // Switch back to points
+                scene.remove(voxelsGroup);
+                scene.add(points);
+            }
+        });
+
+        // Function to create point cloud from data (brightness for Z)
+        function createPointCloudFromData(data) {
+            const positions = new Float32Array(width * height * 3);
+            const colors = new Float32Array(width * height * 3);
+            let index = 0;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+                    const r = data[i] / 255;
+                    const g = data[i + 1] / 255;
+                    const b = data[i + 2] / 255;
+                    const brightness = (r + g + b) / 3;
+
+                    positions[index * 3] = x - width / 2;
+                    positions[index * 3 + 1] = -(y - height / 2);
+                    positions[index * 3 + 2] = brightness * 100;
+
+                    colors[index * 3] = r;
+                    colors[index * 3 + 1] = g;
+                    colors[index * 3 + 2] = b;
+
+                    index++;
+                }
+            }
+
+            geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: parseFloat(pointSizeInput.value),
+                vertexColors: true
+            });
+
+            if (points) scene.remove(points);
+            if (edges) scene.remove(edges);
+
+            points = new THREE.Points(geometry, material);
+            scene.add(points);
+
+            edges = createEdges(geometry, width, height);
+
+            camera.position.z = Math.max(width, height) * 0.75;
+
+            // Reset originals for PCL
+            originalPositions = null;
+            originalColors = null;
+            if (isPclMode) applyPclFilter(true);
+
+            // Highlight hands if enabled
+            if (isHighlightHands) highlightHandsInPointCloud(data);
+        }
+
+        // Function to apply single overlay (image or single video frame)
+        function applyOverlay(styleData) {
+            if (!geometry || !styleData) return;
+
+            const percentage = parseFloat(topPercentageInput.value);
+            const fraction = percentage / 100;
+
+            const posArray = geometry.getAttribute('position').array;
+            const colorArray = geometry.getAttribute('color').array;
+
+            let zs = [];
+            for (let i = 0; i < posArray.length / 3; i++) {
+                zs.push(posArray[i * 3 + 2]);
+            }
+            zs.sort((a, b) => b - a);
+            const index = Math.floor(zs.length * fraction);
+            const threshold = index > 0 ? zs[index - 1] : zs[0];
+
+            for (let idx = 0; idx < posArray.length / 3; idx++) {
+                const z = posArray[idx * 3 + 2];
+                const px = Math.floor(posArray[idx * 3] + width / 2);
+                const py = Math.floor(-posArray[idx * 3 + 1] + height / 2);
+                const i = (py * width + px) * 4;
+
+                if (z >= threshold) {
+                    colorArray[idx * 3] = styleData[i] / 255;
+                    colorArray[idx * 3 + 1] = styleData[i + 1] / 255;
+                    colorArray[idx * 3 + 2] = styleData[i + 2] / 255;
+                } else {
+                    colorArray[idx * 3] = sourceData[i] / 255;
+                    colorArray[idx * 3 + 1] = sourceData[i + 1] / 255;
+                    colorArray[idx * 3 + 2] = sourceData[i + 2] / 255;
+                }
+            }
+            geometry.getAttribute('color').needsUpdate = true;
+
+            // Highlight hands if enabled
+            if (isHighlightHands) highlightHandsInPointCloud(styleData);
+        }
+
+        // Function to apply merged frame for two videos, updating Z and colors
+        function applyMergedFrame(frame1, frame2) {
+            if (!geometry || !frame1 || !frame2) return;
+
+            const posArray = geometry.getAttribute('position').array;
+            const colorArray = geometry.getAttribute('color').array;
+            let zs = [];
+
+            // First pass: update Z as average brightness
+            for (let idx = 0; idx < posArray.length / 3; idx++) {
+                const px = Math.floor(posArray[idx * 3] + width / 2);
+                const py = Math.floor(-posArray[idx * 3 + 1] + height / 2);
+                const i = (py * width + px) * 4;
+
+                const r1 = frame1[i] / 255;
+                const g1 = frame1[i + 1] / 255;
+                const b1 = frame1[i + 2] / 255;
+                const br1 = (r1 + g1 + b1) / 3;
+
+                const r2 = frame2[i] / 255;
+                const g2 = frame2[i + 1] / 255;
+                const b2 = frame2[i + 2] / 255;
+                const br2 = (r2 + g2 + b2) / 3;
+
+                const br = (br1 + br2) / 2;
+                const newZ = br * 100;
+                posArray[idx * 3 + 2] = newZ;
+                zs.push(newZ);
+            }
+
+            // Sort zs to find threshold
+            zs.sort((a, b) => b - a);
+            const percentage = parseFloat(topPercentageInput.value);
+            const fraction = percentage / 100;
+            const index = Math.floor(zs.length * fraction);
+            const threshold = index > 0 ? zs[index - 1] : zs[0];
+
+            // Second pass: update colors based on new Z
+            for (let idx = 0; idx < posArray.length / 3; idx++) {
+                const z = posArray[idx * 3 + 2];
+                const px = Math.floor(posArray[idx * 3] + width / 2);
+                const py = Math.floor(-posArray[idx * 3 + 1] + height / 2);
+                const i = (py * width + px) * 4;
+
+                const styleData = (z >= threshold) ? frame1 : frame2;
+
+                colorArray[idx * 3] = styleData[i] / 255;
+                colorArray[idx * 3 + 1] = styleData[i + 1] / 255;
+                colorArray[idx * 3 + 2] = styleData[i + 2] / 255;
+            }
+
+            geometry.getAttribute('color').needsUpdate = true;
+            geometry.getAttribute('position').needsUpdate = true;
+
+            // Highlight hands if enabled - use frame1
+            if (isHighlightHands) highlightHandsInPointCloud(frame1);
+        }
+
+        // Function to apply full video frame for the point cloud
+        function applyFullVideo(frameData) {
+            if (!geometry || !frameData) return;
+
+            const posArray = geometry.getAttribute('position').array;
+            const colorArray = geometry.getAttribute('color').array;
+
+            for (let idx = 0; idx < posArray.length / 3; idx++) {
+                const px = Math.floor(posArray[idx * 3] + width / 2);
+                const py = Math.floor(-posArray[idx * 3 + 1] + height / 2);
+                const i = (py * width + px) * 4;
+
+                const r = frameData[i] / 255;
+                const g = frameData[i + 1] / 255;
+                const b = frameData[i + 2] / 255;
+                const brightness = (r + g + b) / 3;
+
+                colorArray[idx * 3] = r;
+                colorArray[idx * 3 + 1] = g;
+                colorArray[idx * 3 + 2] = b;
+
+                posArray[idx * 3 + 2] = brightness * 100;
+            }
+            geometry.getAttribute('color').needsUpdate = true;
+            geometry.getAttribute('position').needsUpdate = true;
+
+            // Highlight hands if enabled
+            if (isHighlightHands) highlightHandsInPointCloud(frameData);
+        }
+
+        // Precompute frames for a video using time-based capture
+        async function precomputeVideoFrames(videoElem, videoCanv, videoCt) {
+            const frames = [];
+            const frameSize = width * height * 4;
+            const maxFrames = Math.floor(maxMemoryPerVideo / frameSize);
+            const targetFps = 15;
+            const interval = 1000 / targetFps;
+
+            let captured = 0;
+            const captureFrame = () => {
+                if (captured >= maxFrames) return true;
+
+                videoCt.drawImage(videoElem, 0, 0, width, height);
+                try {
+                    const frameData = new Uint8ClampedArray(videoCt.getImageData(0, 0, width, height).data);
+                    frames.push(frameData);
+                    captured++;
+                } catch (e) {
+                    console.error("Memory allocation failed for frame", e);
+                    return true;
+                }
+                return false;
+            };
+
+            const captureInterval = setInterval(captureFrame, interval);
+
+            videoElem.play();
+
+            await new Promise((resolve) => videoElem.onended = resolve);
+
+            clearInterval(captureInterval);
+            captureFrame(); // Capture last frame
+
+            videoFps = frames.length / (videoElem.duration || 1); // Fallback duration 1s if invalid
+
+            return frames;
+        }
+
+        // Function to start webcam
+        async function startWebcam() {
+            const facingMode = cameraFacingSelect.value;
+            try {
+                webcamStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode }
+                });
+                webcamVideo.srcObject = webcamStream;
+                webcamContainer.style.display = 'block';
+            } catch (err) {
+                console.error("Error accessing webcam", err);
+                alert("Failed to access webcam. Please ensure camera permissions are granted.");
+            }
+        }
+
+        // Function to stop webcam
+        function stopWebcam() {
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+                webcamStream = null;
+            }
+            webcamVideo.srcObject = null;
+            webcamContainer.style.display = 'none';
+        }
+
+        // Capture webcam image
+        captureWebcamImageBtn.addEventListener('click', async () => {
+            await startWebcam();
+            await new Promise(resolve => setTimeout(resolve, 500)); // Wait for video to stabilize
+            if (webcamStream) {
+                webcamCanvas.width = webcamVideo.videoWidth;
+                webcamCanvas.height = webcamVideo.videoHeight;
+                webcamCtx.drawImage(webcamVideo, 0, 0);
+                sourceData = webcamCtx.getImageData(0, 0, webcamCanvas.width, webcamCanvas.height).data;
+                width = webcamCanvas.width;
+                height = webcamCanvas.height;
+                hasImage = true;
+                createPointCloudFromData(sourceData);
+                stopWebcam();
+            }
+        });
+
+        // Start recording webcam video
+        startWebcamVideoBtn.addEventListener('click', async () => {
+            await startWebcam();
+            if (webcamStream) {
+                const stream = webcamVideo.captureStream();
+                webcamRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                webcamChunks = [];
+                webcamRecorder.ondataavailable = (e) => webcamChunks.push(e.data);
+                webcamRecorder.start();
+                isRecordingWebcam = true;
+
+                // Auto-stop after max duration (30s)
+                setTimeout(() => {
+                    if (isRecordingWebcam) stopWebcamVideoBtn.click();
+                }, 30000);
+            }
+        });
+
+        // Stop recording webcam video
+        stopWebcamVideoBtn.addEventListener('click', () => {
+            if (webcamRecorder && isRecordingWebcam) {
+                webcamRecorder.stop();
+                webcamRecorder.onstop = () => {
+                    const blob = new Blob(webcamChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'webcam_video.webm';
+                    a.click();
+                    webcamChunks = [];
+                    isRecordingWebcam = false;
+                };
+            }
+            stopWebcam();
+        });
+
+        // Event listener for left image upload (sourceData)
+        uploadInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const contentImg = new Image();
+                contentImg.src = e.target.result;
+                contentImg.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = contentImg.width;
+                    canvas.height = contentImg.height;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    ctx.drawImage(contentImg, 0, 0);
+                    sourceData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+                    width = contentImg.width;
+                    height = contentImg.height;
+                    hasImage = true;
+
+                    createPointCloudFromData(sourceData);
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Event listener for right image upload (styleDataGlobal)
+        overlayInput.addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (!file || !geometry || !sourceData) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const styleImg = new Image();
+                styleImg.src = e.target.result;
+                await new Promise((resolve) => styleImg.onload = resolve);
+
+                const targetWidth = width;
+                const targetHeight = height;
+
+                const styleResizedCanvas = document.createElement('canvas');
+                styleResizedCanvas.width = targetWidth;
+                styleResizedCanvas.height = targetHeight;
+                const styleResizedCtx = styleResizedCanvas.getContext('2d', { willReadFrequently: true });
+                styleResizedCtx.drawImage(styleImg, 0, 0, targetWidth, targetHeight);
+                styleDataGlobal = styleResizedCtx.getImageData(0, 0, targetWidth, targetHeight).data;
+
+                isPlayingVideo1 = false;
+                isPlayingVideo2 = false;
+                applyOverlay(styleDataGlobal);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Event listener for first video upload
+        videoInput1.addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                videoElement1 = document.createElement('video');
+                videoElement1.style.display = 'none';
+                videoElement1.muted = true;
+                document.body.appendChild(videoElement1);
+                videoElement1.src = e.target.result;
+
+                videoCanvas1 = document.createElement('canvas');
+                videoCtx1 = videoCanvas1.getContext('2d', { willReadFrequently: true });
+
+                await new Promise((resolve) => videoElement1.onloadedmetadata = resolve);
+
+                width = videoElement1.videoWidth;
+                height = videoElement1.videoHeight;
+                videoCanvas1.width = width;
+                videoCanvas1.height = height;
+
+                if (!hasImage) {
+                    videoElement1.currentTime = 0;
+                    await new Promise((resolve, reject) => {
+                        videoElement1.onseeked = resolve;
+                        videoElement1.onerror = reject;
+                    });
+                    videoCtx1.drawImage(videoElement1, 0, 0, width, height);
+                    sourceData = videoCtx1.getImageData(0, 0, width, height).data;
+                    createPointCloudFromData(sourceData);
+                }
+
+                framesData1 = await precomputeVideoFrames(videoElement1, videoCanvas1, videoCtx1);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Event listener for second video upload
+        videoInput2.addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                videoElement2 = document.createElement('video');
+                videoElement2.style.display = 'none';
+                videoElement2.muted = true;
+                document.body.appendChild(videoElement2);
+                videoElement2.src = e.target.result;
+
+                videoCanvas2 = document.createElement('canvas');
+                videoCtx2 = videoCanvas2.getContext('2d', { willReadFrequently: true });
+
+                await new Promise((resolve) => videoElement2.onloadedmetadata = resolve);
+
+                videoCanvas2.width = width;
+                videoCanvas2.height = height;
+
+                framesData2 = await precomputeVideoFrames(videoElement2, videoCanvas2, videoCtx2);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Play Video 1
+        playVideo1Btn.addEventListener('click', () => {
+            if (framesData1.length > 0) {
+                isPlayingVideo1 = true;
+                lastFrameTime1 = performance.now();
+                currentFrame1 = 0;
+            }
+        });
+
+        // Stop Video 1
+        stopVideo1Btn.addEventListener('click', () => {
+            isPlayingVideo1 = false;
+            if (!isPlayingVideo2) {
+                applyFullVideo(sourceData); // Reset to original image
+            }
+        });
+
+        // Play Video 2
+        playVideo2Btn.addEventListener('click', () => {
+            if (framesData2.length > 0) {
+                isPlayingVideo2 = true;
+                lastFrameTime2 = performance.now();
+                currentFrame2 = 0;
+            }
+        });
+
+        // Stop Video 2
+        stopVideo2Btn.addEventListener('click', () => {
+            isPlayingVideo2 = false;
+            if (!isPlayingVideo1) {
+                applyFullVideo(sourceData); // Reset to original image
+            }
+        });
+
+        // Mix Videos - reset initial point cloud by setting Z to 0
+        mixVideosBtn.addEventListener('click', () => {
+            if (framesData1.length > 0 && framesData2.length > 0) {
+                // Erase initial point cloud by setting Z to 0
+                if (geometry) {
+                    const posArray = geometry.getAttribute('position').array;
+                    for (let idx = 0; idx < posArray.length / 3; idx++) {
+                        posArray[idx * 3 + 2] = 0;
+                    }
+                    geometry.getAttribute('position').needsUpdate = true;
+                }
+
+                isPlayingVideo1 = true;
+                isPlayingVideo2 = true;
+                lastFrameTime1 = performance.now();
+                lastFrameTime2 = performance.now();
+                currentFrame1 = 0;
+                currentFrame2 = 0;
+            }
+        });
+
+        // Event listener for top percentage change
+        topPercentageInput.addEventListener('input', function() {
+            if (styleDataGlobal) {
+                applyOverlay(styleDataGlobal);
+            } else if (framesData1.length > 0 || framesData2.length > 0) {
+                // Apply based on what's playing
+                const frame1 = framesData1[currentFrame1 % framesData1.length] || sourceData;
+                const frame2 = framesData2[currentFrame2 % framesData2.length] || sourceData;
+                applyMergedFrame(frame1, frame2);
+            }
+        });
+
+        // Function to start recording
+        function startRecording(duration) {
+            const stream = renderer.domElement.captureStream(60);
+            recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            const chunks = [];
+            recorder.ondataavailable = (e) => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'merged_pointcloud_video.webm';
+                a.click();
+                isGeneratingVideo = false;
+            };
+
+            recorder.start();
+            setTimeout(() => recorder.stop(), duration * 1000);
+        }
+
+        // Generate full video button
+        generateVideoBtn.addEventListener('click', function() {
+            if (!(isPlayingVideo1 || isPlayingVideo2)) return;
+
+            let duration = parseInt(videoDurationInput.value);
+            if (duration > 30) duration = 30;
+
+            const minFrames = Math.min(framesData1.length, framesData2.length) || Math.max(framesData1.length, framesData2.length);
+            const maxDuration = minFrames / videoFps;
+            duration = Math.min(duration, maxDuration);
+
+            isGeneratingVideo = true;
+            startRecording(duration);
+        });
+
+        // Preview button (5s sample)
+        previewVideoBtn.addEventListener('click', function() {
+            if (!(isPlayingVideo1 || isPlayingVideo2)) return;
+
+            let duration = 5;
+            const minFrames = Math.min(framesData1.length, framesData2.length) || Math.max(framesData1.length, framesData2.length);
+            const maxDuration = minFrames / videoFps;
+            duration = Math.min(duration, maxDuration);
+
+            isGeneratingVideo = true;
+            startRecording(duration);
+        });
+
+        // Function to generate ASCII art from the current view
+        function generateAscii() {
+            // Save original states
+            const originalAspect = camera.aspect;
+            const originalSize = points ? points.material.size : 1;
+            camera.aspect = asciiWidth / asciiHeight;
+            camera.updateProjectionMatrix();
+            if (points) {
+                points.material.size = originalSize * (asciiWidth / window.innerWidth);
+                points.material.needsUpdate = true;
+            }
+
+            // Render to target
+            renderer.setRenderTarget(asciiTarget);
+            renderer.clear();
+            renderer.render(scene, camera);
+            renderer.setRenderTarget(null);
+
+            // Read pixels
+            const buffer = new Uint8Array(asciiWidth * asciiHeight * 4);
+            renderer.readRenderTargetPixels(asciiTarget, 0, 0, asciiWidth, asciiHeight, buffer);
+
+            // Restore states
+            camera.aspect = originalAspect;
+            camera.updateProjectionMatrix();
+            if (points) {
+                points.material.size = originalSize;
+                points.material.needsUpdate = true;
+            }
+
+            // Generate ASCII
+            let ascii = '';
+            const chars = ' .,:;+*?%S#@'; // From light to dark
+            for (let y = asciiHeight - 1; y >= 0; y--) {
+                for (let x = 0; x < asciiWidth; x++) {
+                    const i = (y * asciiWidth + x) * 4;
+                    const r = buffer[i] / 255;
+                    const g = buffer[i + 1] / 255;
+                    const b = buffer[i + 2] / 255;
+                    const avg = (r + g + b) / 3;
+                    const charIndex = Math.floor(avg * (chars.length - 1));
+                    ascii += chars[charIndex];
+                }
+                ascii += '\n';
+            }
+            asciiOutput.textContent = ascii;
+
+            // Adjust font size to fit
+            const fontSize = window.innerHeight / asciiHeight;
+            asciiOutput.style.fontSize = `${fontSize}px`;
+            asciiOutput.style.lineHeight = `${fontSize}px`;
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            const now = performance.now();
+
+            if (isPlayingVideo1 && framesData1.length > 0) {
+                const delta1 = now - lastFrameTime1;
+                if (delta1 >= 1000 / videoFps) {
+                    if (framesData2.length > 0 && isPlayingVideo2) {
+                        const frame1 = framesData1[currentFrame1];
+                        const frame2 = framesData2[currentFrame2];
+                        applyMergedFrame(frame1, frame2);
+                        currentFrame2 = (currentFrame2 + 1) % framesData2.length;
+                    } else {
+                        applyFullVideo(framesData1[currentFrame1]);
+                    }
+                    currentFrame1 = (currentFrame1 + 1) % framesData1.length;
+                    lastFrameTime1 = now;
+                }
+            }
+
+            if (isPlayingVideo2 && framesData2.length > 0) {
+                const delta2 = now - lastFrameTime2;
+                if (delta2 >= 1000 / videoFps) {
+                    if (framesData1.length > 0 && isPlayingVideo1) {
+                        // Merged already handled in video1 block
+                    } else {
+                        applyFullVideo(framesData2[currentFrame2]);
+                    }
+                    currentFrame2 = (currentFrame2 + 1) % framesData2.length;
+                    lastFrameTime2 = now;
+                }
+            }
+
+            if (isAsciiMode) {
+                generateAscii();
+            } else {
+                renderer.render(scene, camera);
+            }
+        }
+
+        animate();
+
+        // Function to create edges
+        function createEdges(geometry, width, height) {
+            const indices = [];
+
+            // Horizontal
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width - 1; x++) {
+                    const a = y * width + x;
+                    const b = a + 1;
+                    indices.push(a, b);
+                }
+            }
+
+            // Vertical
+            for (let x = 0; x < width; x++) {
+                for (let y = 0; y < height - 1; y++) {
+                    const a = x + y * width;
+                    const b = a + width;
+                    indices.push(a, b);
+                }
+            }
+
+            const edgesGeo = new THREE.BufferGeometry();
+            edgesGeo.setAttribute('position', geometry.getAttribute('position'));
+            edgesGeo.setAttribute('color', geometry.getAttribute('color'));
+            edgesGeo.setIndex(indices);
+
+            const material = new THREE.LineBasicMaterial({
+                vertexColors: true
+            });
+
+            return new THREE.LineSegments(edgesGeo, material);
+        }
+
+        // ASCII toggle
+        renderAsciiBtn.addEventListener('click', () => {
+            isAsciiMode = !isAsciiMode;
+            renderAsciiBtn.textContent = isAsciiMode ? 'Render Points' : 'Render ASCII Art';
+            renderer.domElement.style.opacity = isAsciiMode ? '0' : '1';
+            if (isAsciiMode) {
+                asciiOutput.style.display = 'block';
+                asciiOutput.style.position = 'fixed';
+                asciiOutput.style.top = '0';
+                asciiOutput.style.left = '0';
+                asciiOutput.style.width = '100vw';
+                asciiOutput.style.height = '100vh';
+                asciiOutput.style.maxWidth = 'none';
+                asciiOutput.style.overflow = 'hidden';
+                asciiOutput.style.zIndex = '999';
+            } else {
+                asciiOutput.style.display = 'none';
+            }
+        });
+
+        // PCL toggle
+        pclRenderBtn.addEventListener('click', async () => {
+            isPclMode = !isPclMode;
+            pclRenderBtn.textContent = isPclMode ? 'Render Original' : 'PCL Render';
+            await applyPclFilter(isPclMode);
+        });
+
+        // Other event listeners
+        pointSizeInput.addEventListener('input', function() {
+            if (points) {
+                points.material.size = parseFloat(this.value);
+                points.material.needsUpdate = true;
+            }
+        });
+
+        captureBtn.addEventListener('click', function() {
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = 'capture.png';
+            a.click();
+        });
+
+        toggleEdgesBtn.addEventListener('click', function() {
+            if (edges) {
+                if (scene.children.includes(edges)) {
+                    scene.remove(edges);
+                } else {
+                    scene.add(edges);
+                }
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            asciiHeight = Math.floor(asciiWidth * (window.innerHeight / window.innerWidth));
+            asciiTarget.setSize(asciiWidth, asciiHeight);
+        });
+
+        // New: Hypergraph optimization
+        function optimizeWithHypergraph() {
+            if (!geometry || !width || !height) return;
+
+            const posArray = geometry.getAttribute('position').array;
+            const numPoints = posArray.length / 3;
+
+            const iterations = parseInt(hypergraphIterationsInput.value);
+            const topFraction = 0.5; // Top 50%, adjustable
+            const varianceThreshold = 5; // Lowered for more groups
+            const amplifyFactor = 2.0; // Amplification for high variance (edges)
+
+            for (let iter = 0; iter < iterations; iter++) {
+                // Get high Z points (recompute each iteration as Z changes)
+                let zs = [];
+                for (let i = 0; i < numPoints; i++) {
+                    zs.push({index: i, z: posArray[i*3 + 2]});
+                }
+                zs.sort((a, b) => b.z - a.z);
+
+                const topCount = Math.floor(numPoints * topFraction);
+                const highZIndices = new Set(zs.slice(0, topCount).map(item => item.index));
+
+                // Create hyperedges based on larger 5x5 neighborhoods
+                const hyperedges = [];
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const idx = y * width + x;
+                        if (!highZIndices.has(idx)) continue;
+
+                        const neighbors = [];
+                        for (let dy = -2; dy <= 2; dy++) {
+                            for (let dx = -2; dx <= 2; dx++) {
+                                if (dx === 0 && dy === 0) continue;
+                                const nx = x + dx;
+                                const ny = y + dy;
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                    const nidx = ny * width + nx;
+                                    if (highZIndices.has(nidx)) {
+                                        neighbors.push(nidx);
+                                    }
+                                }
+                            }
+                        }
+                        if (neighbors.length >= 4) { // Min size for hyperedge, increased for larger groups
+                            hyperedges.push([idx, ...neighbors]);
+                        }
+                    }
+                }
+
+                // Process each hyperedge
+                hyperedges.forEach(edge => {
+                    const points = edge.map(i => ({
+                        x: posArray[i*3],
+                        y: posArray[i*3 + 1],
+                        z: posArray[i*3 + 2]
+                    }));
+
+                    // Compute Z variance
+                    const zsEdge = points.map(p => p.z);
+                    const meanZ = zsEdge.reduce((a, b) => a + b, 0) / zsEdge.length;
+                    const varZ = zsEdge.reduce((a, b) => a + (b - meanZ) ** 2, 0) / zsEdge.length;
+
+                    if (varZ < varianceThreshold) {
+                        // Low variance: Fit plane for smoothing
+                        const A = points.map(p => [p.x, p.y, 1]);
+                        const b = points.map(p => p.z);
+                        const At = numeric.transpose(A);
+                        const AtA = numeric.dot(At, A);
+                        const Atb = numeric.dot(At, b);
+                        let coef;
+                        try {
+                            coef = numeric.solve(AtA, Atb);
+                        } catch (e) {
+                            console.warn("Singular matrix in plane fit", e);
+                            return;
+                        }
+
+                        // Adjust Z positions with plane projection
+                        edge.forEach((i, j) => {
+                            const newZ = coef[0] * points[j].x + coef[1] * points[j].y + coef[2];
+                            posArray[i*3 + 2] = newZ;
+                        });
+                    } else {
+                        // High variance: Amplification differences for edge enhancement
+                        edge.forEach((i, j) => {
+                            const deltaZ = points[j].z - meanZ;
+                            const newZ = meanZ + deltaZ * amplifyFactor;
+                            posArray[i*3 + 2] = newZ;
+                        });
+                    }
+                });
+            }
+
+            geometry.getAttribute('position').needsUpdate = true;
+            console.log(`Hypergraph optimization applied for ${iterations} iterations with enhanced changes.`);
+        }
+
+        // Hypergraph button
+        renderHypergraphBtn.addEventListener('click', () => {
+            optimizeWithHypergraph();
+        });
+
+        // New: Stereo vision depth computation
+        function computeStereoDepth() {
+            if (!sourceData || !styleDataGlobal) {
+                console.log("Need both left (imageUpload) and right (overlayUpload) images loaded.");
+                return;
+            }
+
+            const posArray = geometry.getAttribute('position').array;
+            const windowSize = 5; // Block size for matching
+            const maxDisparity = 32; // Maximum disparity search range (adjust for speed vs accuracy)
+            const scaleFactor = 500; // Scaling for depth to make changes observable
+
+            function getGray(data, i) {
+                return (data[i] + data[i + 1] + data[i + 2]) / 3;
+            }
+
+            console.log("Computing stereo disparity... This may take a while.");
+
+            for (let y = 0; y < height; y++) {
+                for (let x = maxDisparity; x < width; x++) {
+                    const idx = y * width + x;
+                    let minCost = Infinity;
+                    let bestD = 0;
+
+                    for (let d = 0; d < maxDisparity; d++) {
+                        if (x - d < 0) continue;
+                        let cost = 0;
+                        const half = Math.floor(windowSize / 2);
+
+                        for (let wy = -half; wy <= half; wy++) {
+                            for (let wx = -half; wx <= half; wx++) {
+                                const ly = y + wy;
+                                const lx = x + wx;
+                                if (ly < 0 || ly >= height || lx < 0 || lx >= width) continue;
+
+                                const leftI = (ly * width + lx) * 4;
+                                const rx = lx - d;
+                                if (rx < 0) continue;
+                                const rightI = (ly * width + rx) * 4;
+
+                                cost += Math.abs(getGray(sourceData, leftI) - getGray(styleDataGlobal, rightI));
+                            }
+                        }
+
+                        if (cost < minCost) {
+                            minCost = cost;
+                            bestD = d;
+                        }
+                    }
+
+                    const depth = bestD > 0 ? scaleFactor / bestD : 0;
+                    posArray[idx * 3 + 2] = depth;
+                }
+            }
+
+            geometry.attributes.position.needsUpdate = true;
+            console.log("Stereo depth applied.");
+        }
+
+        // Stereo render button
+        stereoRenderBtn.addEventListener('click', computeStereoDepth);
+    </script>
+</body>
+</html>

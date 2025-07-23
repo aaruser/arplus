@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Maestro with Grid-Based Chord Layout</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: transparent;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            color: white;
+            max-width: 300px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .section-title {
+            color: #FF5722;
+            font-weight: bold;
+            margin-top: 10px;
+            border-bottom: 1px solid #666;
+            padding-bottom: 5px;
+        }
+        button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin: 5px 0;
+            display: block;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            color: white;
+            z-index: 100;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            color: white;
+            z-index: 200;
+        }
+        #hand-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            z-index: 100;
+            max-width: 300px;
+        }
+        .slider-container {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            color: white;
+        }
+        input[type="range"] {
+            width: 100px;
+        }
+        .slider-value {
+            margin-left: 10px;
+            min-width: 50px;
+            text-align: right;
+        }
+        .region-label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 10px;
+            text-align: center;
+            z-index: 90;
+            writing-mode: horizontal-tb;
+        }
+        .left-region-label {
+            left: 10px;
+        }
+        .right-region-label {
+            right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <video id="video" style="display: none;"></video>
+    <div id="controls">
+        <div class="section-title">Maestro Controls</div>
+        <button id="activateAudio">Activate Audio</button>
+        <button id="toggleAudio">Enable Audio</button>
+        <button id="simulateSong" disabled>Simulate Song</button>
+        <button id="playSynthSong" disabled>Play Synth Song</button>
+        <button id="playWavSynth" disabled>Play WAV + Synth</button>
+        <button id="playWavPiano" disabled>Play WAV with Piano</button>
+        <div class="slider-container">
+            <label for="volume">Volume:</label>
+            <input type="range" id="volume" min="0" max="1" step="0.01" value="0.5">
+            <span id="volume-display" class="slider-value">0.50</span>
+        </div>
+        <div class="slider-container">
+            <label for="waveType">Wave Type:</label>
+            <select id="waveType">
+                <option value="sine">Sine</option>
+                <option value="square">Square</option>
+                <option value="sawtooth">Sawtooth</option>
+                <option value="triangle">Triangle</option>
+                <option value="guitar">Guitar</option>
+            </select>
+        </div>
+        <div class="slider-container">
+            <label for="progression">Progression:</label>
+            <select id="progression">
+                <option value="standard-32">Standard (32)</option>
+                <option value="pentatonic-10">Pentatonic (10)</option>
+                <option value="jazz-12">Jazz (12)</option>
+            </select>
+        </div>
+        <div class="slider-container">
+            <label for="song">Song:</label>
+            <select id="song">
+                <option value="none">None</option>
+                <option value="clair-de-lune">Clair de Lune</option>
+                <option value="canon-in-d">Canon in D</option>
+                <option value="let-it-be">Let It Be</option>
+            </select>
+        </div>
+        <div class="slider-container">
+            <label for="order">Order:</label>
+            <select id="order">
+                <option value="linear">Linear</option>
+                <option value="clockwise">Clockwise</option>
+                <option value="snake">Snake</option>
+            </select>
+        </div>
+        <div class="slider-container">
+            <label for="wavFile">Load WAV Song:</label>
+            <input type="file" id="wavFile" accept=".wav">
+        </div>
+        <div class="slider-container">
+            <label for="attack">Attack Time:</label>
+            <input type="range" id="attack" min="0.01" max="1" step="0.01" value="0.1">
+            <span id="attack-display" class="slider-value">0.10</span>
+        </div>
+        <div class="slider-container">
+            <label for="release">Release Time:</label>
+            <input type="range" id="release" min="0.01" max="2" step="0.01" value="0.5">
+            <span id="release-display" class="slider-value">0.50</span>
+        </div>
+        <div class="section-title">Metronome</div>
+        <div>BPM: <span id="bpm-display">N/A</span></div>
+        <button id="startMetronome" disabled>Start Metronome</button>
+    </div>
+    <div id="hand-info">
+        <div class="section-title">Hand Tracking</div>
+        <div>Left Hand: <span id="left-hand-status">Not detected</span></div>
+        <div>Right Hand: <span id="right-hand-status">Not detected</span></div>
+        <div>Gesture: <span id="gesture-info">None</span></div>
+        <div>Active Chord: <span id="note-info">None</span></div>
+    </div>
+    <div id="info">Initializing...</div>
+    <div id="loading">Loading hand tracking and chord visualizer...</div>
+    <div id="region-labels"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection@latest/dist/hand-pose-detection.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@latest/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <!-- Removed fft-js script -->
+
+    <script>
+        // Custom FFT implementation
+        function FFT(x_re, x_im) {
+            var m = x_re.length / 2, k, X_re = [], X_im = [], Y_re = [], Y_im = [],
+            a, b, tw_re, tw_im;
+            for (k = 0; k < m; ++k) {
+                X_re[k] = x_re[2 * k];
+                X_im[k] = x_im[2 * k];
+                Y_re[k] = x_re[2 * k + 1];
+                Y_im[k] = x_im[2 * k + 1];
+            }
+            if (m > 1) {
+                FFT(X_re, X_im);
+                FFT(Y_re, Y_im);
+            }
+            for (k = 0; k < m; ++k) {
+                a = -Math.PI * k / m, tw_re = Math.cos(a), tw_im = Math.sin(a);
+                a = tw_re * Y_re[k] - tw_im * Y_im[k];
+                b = tw_re * Y_im[k] + tw_im * Y_re[k];
+                x_re[k] = X_re[k] + a;
+                x_im[k] = X_im[k] + b;
+                x_re[k + m] = X_re[k] - a;
+                x_im[k + m] = X_im[k] - b;
+            }
+        }
+
+        function bitReverse(num, bits) {
+            let rev = 0;
+            for (let i = 0; i < bits; i++) {
+                rev = (rev << 1) | (num & 1);
+                num >>= 1;
+            }
+            return rev;
+        }
+
+        // Chord definitions (C4 to C8)
+        const chordNotes = [
+            { note: 'C4', freq: 261.63, index: 0 },
+            { note: 'C#4', freq: 277.18, index: 1 },
+            { note: 'D4', freq: 293.66, index: 2 },
+            { note: 'D#4', freq: 311.13, index: 3 },
+            { note: 'E4', freq: 329.63, index: 4 },
+            { note: 'F4', freq: 349.23, index: 5 },
+            { note: 'F#4', freq: 369.99, index: 6 },
+            { note: 'G4', freq: 392.00, index: 7 },
+            { note: 'G#4', freq: 415.30, index: 8 },
+            { note: 'A4', freq: 440.00, index: 9 },
+            { note: 'A#4', freq: 466.16, index: 10 },
+            { note: 'B4', freq: 493.88, index: 11 },
+            { note: 'C5', freq: 523.25, index: 12 },
+            { note: 'C#5', freq: 554.37, index: 13 },
+            { note: 'D5', freq: 587.33, index: 14 },
+            { note: 'D#5', freq: 622.25, index: 15 },
+            { note: 'E5', freq: 659.25, index: 16 },
+            { note: 'F5', freq: 698.46, index: 17 },
+            { note: 'F#5', freq: 739.99, index: 18 },
+            { note: 'G5', freq: 783.99, index: 19 },
+            { note: 'G#5', freq: 830.61, index: 20 },
+            { note: 'A5', freq: 880.00, index: 21 },
+            { note: 'A#5', freq: 932.33, index: 22 },
+            { note: 'B5', freq: 987.77, index: 23 },
+            { note: 'C6', freq: 1046.50, index: 24 },
+            { note: 'C#6', freq: 1108.73, index: 25 },
+            { note: 'D6', freq: 1174.66, index: 26 },
+            { note: 'D#6', freq: 1244.51, index: 27 },
+            { note: 'E6', freq: 1318.51, index: 28 },
+            { note: 'F6', freq: 1396.91, index: 29 },
+            { note: 'F#6', freq: 1479.98, index: 30 },
+            { note: 'G6', freq: 1567.98, index: 31 },
+            { note: 'G#6', freq: 1661.22, index: 32 },
+            { note: 'A6', freq: 1760.00, index: 33 },
+            { note: 'A#6', freq: 1864.66, index: 34 },
+            { note: 'B6', freq: 1975.53, index: 35 },
+            { note: 'C7', freq: 2093.00, index: 36 },
+            { note: 'C#7', freq: 2217.46, index: 37 },
+            { note: 'D7', freq: 2349.32, index: 38 },
+            { note: 'D#7', freq: 2489.02, index: 39 },
+            { note: 'E7', freq: 2637.02, index: 40 },
+            { note: 'F7', freq: 2793.83, index: 41 },
+            { note: 'F#7', freq: 2959.96, index: 42 },
+            { note: 'G7', freq: 3135.96, index: 43 },
+            { note: 'G#7', freq: 3322.44, index: 44 },
+            { note: 'A7', freq: 3520.00, index: 45 },
+            { note: 'A#7', freq: 3729.31, index: 46 },
+            { note: 'B7', freq: 3951.07, index: 47 },
+            { note: 'C8', freq: 4186.01, index: 48 }
+        ];
+        const keyWidth = 0.12;
+        const keyHeight = 0.18;
+        const whiteKeyCount = chordNotes.slice(0, 49).filter(k => k.note.includes('C') || k.note.includes('D') || k.note.includes('E') || k.note.includes('F') || k.note.includes('G') || k.note.includes('A') || k.note.includes('B')).length;
+        const blackKeyHeight = 0.12;
+        const blackKeyDepth = 0.06;
+
+        // Chord templates (binary for simplicity)
+        const chordTemplates = {
+            'major': [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+            'minor': [1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0],
+            'dim': [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0],
+            'major7': [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1],
+            'minor7': [1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0],
+            'dom7': [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]
+        };
+
+        // Chord progressions
+        const progressions = {
+            'standard-32': {
+                chords: [
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'D4', type: 'minor', index: 2, color: 0xFFFF00 },
+                    { root: 'E4', type: 'minor', index: 4, color: 0xFF00FF },
+                    { root: 'F4', type: 'major', index: 5, color: 0x00FF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'A4', type: 'minor', index: 9, color: 0x00FFFF },
+                    { root: 'B4', type: 'dim', index: 11, color: 0xFFA500 },
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'F4', type: 'major', index: 5, color: 0x00FF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'A4', type: 'minor', index: 9, color: 0x00FFFF },
+                    { root: 'D4', type: 'minor', index: 2, color: 0xFFFF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'F4', type: 'major', index: 5, color: 0x00FF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'D4', type: 'minor', index: 2, color: 0xFFFF00 },
+                    { root: 'E4', type: 'minor', index: 4, color: 0xFF00FF },
+                    { root: 'F4', type: 'major', index: 5, color: 0x00FF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'A4', type: 'minor', index: 9, color: 0x00FFFF },
+                    { root: 'B4', type: 'dim', index: 11, color: 0xFFA500 },
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'F4', type: 'major', index: 5, color: 0x00FF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'A4', type: 'minor', index: 9, color: 0x00FFFF },
+                    { root: 'D4', type: 'minor', index: 2, color: 0xFFFF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'F4', type: 'major', index: 5, color: 0x00FF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 }
+                ]
+            },
+            'pentatonic-10': {
+                chords: [
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'D4', type: 'minor', index: 2, color: 0xFFFF00 },
+                    { root: 'E4', type: 'minor', index: 4, color: 0xFF00FF },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'A4', type: 'minor', index: 9, color: 0x00FFFF },
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'D4', type: 'minor', index: 2, color: 0xFFFF00 },
+                    { root: 'E4', type: 'minor', index: 4, color: 0xFF00FF },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'A4', type: 'minor', index: 9, color: 0x00FFFF }
+                ]
+            },
+            'jazz-12': {
+                chords: [
+                    { root: 'D4', type: 'minor7', index: 2, color: 0xFFFF00 },
+                    { root: 'G4', type: 'dom7', index: 7, color: 0xFF0000 },
+                    { root: 'C4', type: 'major7', index: 0, color: 0x0000FF },
+                    { root: 'A4', type: 'minor7', index: 9, color: 0x00FFFF },
+                    { root: 'D4', type: 'minor7', index: 2, color: 0xFFFF00 },
+                    { root: 'G4', type: 'dom7', index: 7, color: 0xFF0000 },
+                    { root: 'C4', type: 'major7', index: 0, color: 0x0000FF },
+                    { root: 'F4', type: 'major7', index: 5, color: 0x00FF00 },
+                    { root: 'E4', type: 'minor7', index: 4, color: 0xFF00FF },
+                    { root: 'A4', type: 'minor7', index: 9, color: 0x00FFFF },
+                    { root: 'D4', type: 'minor7', index: 2, color: 0xFFFF00 },
+                    { root: 'G4', type: 'dom7', index: 7, color: 0xFF0000 }
+                ]
+            },
+            'clair-de-lune': {
+                chords: [
+                    { root: 'C#4', type: 'major7', index: 1, color: 0x4682B4 },
+                    { root: 'F4', type: 'major7', index: 5, color: 0x00FF00 },
+                    { root: 'A4', type: 'minor7', index: 9, color: 0x00FFFF },
+                    { root: 'G#4', type: 'dom7', index: 8, color: 0xFF4500 },
+                    { root: 'G#4', type: 'dom7', index: 8, color: 0xFF4500 },
+                    { root: 'A4', type: 'minor7', index: 9, color: 0x00FFFF },
+                    { root: 'F#4', type: 'minor7', index: 6, color: 0xFFD700 },
+                    { root: 'C#4', type: 'major7', index: 1, color: 0x4682B4 }
+                ],
+                order: 'clockwise'
+            },
+            'canon-in-d': {
+                chords: [
+                    { root: 'D4', type: 'major', index: 2, color: 0xFFFF00 },
+                    { root: 'A4', type: 'major', index: 9, color: 0x00FFFF },
+                    { root: 'B4', type: 'minor', index: 11, color: 0xFFA500 },
+                    { root: 'F#4', type: 'minor', index: 6, color: 0xFFD700 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'D4', type: 'major', index: 2, color: 0xFFFF00 },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'A4', type: 'major', index: 9, color: 0x00FFFF }
+                ],
+                order: 'clockwise'
+            },
+            'let-it-be': {
+                chords: [
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'A4', type: 'minor', index: 9, color: 0x00FFFF },
+                    { root: 'F4', type: 'major', index: 5, color: 0x00FF00 },
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF },
+                    { root: 'G4', type: 'major', index: 7, color: 0xFF0000 },
+                    { root: 'F4', type: 'major', index: 5, color: 0x00FF00 },
+                    { root: 'C4', type: 'major', index: 0, color: 0x0000FF }
+                ],
+                order: 'clockwise'
+            }
+        };
+
+        const colorsPalette = [0x0000FF, 0xFF0000, 0x00FF00, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFFA500, 0x4682B4, 0xFF4500, 0xFFD700];
+
+        // Three.js variables
+        let scene, camera, renderer;
+        let videoTexture, videoMesh;
+        let pianoKeyMeshes = [];
+        let leftParticleSystem, rightParticleSystem;
+        let leftParticles = [], rightParticles = [];
+        let gridMesh, gridMaterial, labelMesh, labelMaterial;
+
+        // Hand tracking variables
+        let handDetector, video;
+        let leftHandPosition = { x: 0, y: 0, z: 0 };
+        let rightHandPosition = { x: 0, y: 0, z: 0 };
+        let leftHandDetected = false;
+        let rightHandDetected = false;
+        let lastGestureTime = 0;
+        let lastChordChangeTime = 0;
+        let currentGesture = 'none';
+        let activeNotes = new Map();
+        let currentChordIndex = -1;
+        let lastX = -1;
+        let lastY = -1;
+
+        // Audio variables
+        let audioContext, masterGain;
+        let volume = 0.5;
+        let waveType = 'sine';
+        let progression = 'standard-32';
+        let attack = 0.1;
+        let release = 0.5;
+        let audioEnabled = false;
+        let audioActivated = false;
+        let audioBuffer = null;
+        let chordTimings = [];
+        let customCount = 0;
+        let customAudioBuffers = {};
+        let customChordTimings = {};
+        let metronomeInterval = null;
+
+        function computeUniqueChords(chordsArray) {
+            const seen = new Set();
+            const unique = [];
+            chordsArray.forEach(chord => {
+                const key = `${chord.root}_${chord.type}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    unique.push(chord);
+                }
+            });
+            return unique;
+        }
+
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = null;
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 1.5);
+            camera.lookAt(0, 0, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
+            directionalLight.position.set(0, 1, 1);
+            scene.add(directionalLight);
+
+            videoTexture = new THREE.VideoTexture(video);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+            const videoMaterial = new THREE.MeshBasicMaterial({
+                map: videoTexture,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            const aspect = window.innerWidth / window.innerHeight;
+            const videoGeometry = new THREE.PlaneGeometry(2 * aspect, 2);
+            videoMesh = new THREE.Mesh(videoGeometry, videoMaterial);
+            videoMesh.position.z = -0.7;
+            scene.add(videoMesh);
+
+            let whiteKeyIndex = 0;
+            chordNotes.slice(0, 49).forEach((key, i) => {
+                const isWhite = !key.note.includes('#');
+                const geometry = new THREE.BoxGeometry(
+                    isWhite ? keyWidth : keyWidth * 0.6,
+                    isWhite ? 0.06 : blackKeyDepth,
+                    isWhite ? keyHeight : blackKeyHeight
+                );
+                const keyMaterial = new THREE.MeshPhongMaterial({
+                    color: isWhite ? 0xFFFFFF : 0x000000,
+                    specular: 0x555555,
+                    shininess: 30
+                });
+                const keyMesh = new THREE.Mesh(geometry, keyMaterial);
+                const xPos = (whiteKeyIndex * keyWidth) - ((whiteKeyCount - 16) * keyWidth / 2);
+                if (isWhite) {
+                    keyMesh.position.set(xPos, -0.7, 0);
+                    whiteKeyIndex++;
+                } else {
+                    keyMesh.position.set(xPos - (keyWidth / 2), -0.67, 0);
+                }
+                scene.add(keyMesh);
+                pianoKeyMeshes.push({ mesh: keyMesh, key });
+            });
+
+            const gridGeometry = new THREE.PlaneGeometry(2 * aspect, 2);
+            gridMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    gridCols: { value: progressions[progression].gridCols },
+                    gridRows: { value: progressions[progression].gridRows },
+                    numCells: { value: 0 },
+                    activeCell: { value: -1 },
+                    nextCell: { value: -1 }, // New uniform for next cell
+                    gridColor: { value: new THREE.Vector3(1, 1, 1) },
+                    activeColor: { value: new THREE.Vector3(1, 1, 1) },
+                    nextColor: { value: new THREE.Vector3(0, 1, 0) } // Green for next cell
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float gridCols;
+                    uniform float gridRows;
+                    uniform float numCells;
+                    uniform float activeCell;
+                    uniform float nextCell;
+                    uniform vec3 gridColor;
+                    uniform vec3 activeColor;
+                    uniform vec3 nextColor;
+                    varying vec2 vUv;
+                    void main() {
+                        float colWidth = 1.0 / gridCols;
+                        float rowHeight = 1.0 / gridRows;
+                        float colIndex = floor(vUv.x / colWidth);
+                        float rowIndex = floor(vUv.y / rowHeight);
+                        float cellIndex = rowIndex * gridCols + colIndex;
+                        if (cellIndex >= numCells) {
+                            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+                        } else {
+                            float boundaryX = abs(vUv.x - colIndex * colWidth) / colWidth;
+                            float boundaryY = abs(vUv.y - rowIndex * rowHeight) / rowHeight;
+                            float opacity = (boundaryX < 0.02 || boundaryX > 0.98 || boundaryY < 0.02 || boundaryY > 0.98) ? 0.3 : 0.1;
+                            if (cellIndex == activeCell) {
+                                gl_FragColor = vec4(activeColor, 0.5);
+                            } else if (cellIndex == nextCell) {
+                                gl_FragColor = vec4(nextColor, 0.5);
+                            } else {
+                                gl_FragColor = vec4(gridColor, opacity);
+                            }
+                        }
+                    }
+                `,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            gridMesh = new THREE.Mesh(gridGeometry, gridMaterial);
+            gridMesh.position.z = -0.5;
+            scene.add(gridMesh);
+
+            updateLabelTexture();
+
+            const particleGeometry = new THREE.BufferGeometry();
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 0.05,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8
+            });
+            leftParticleSystem = new THREE.Points(particleGeometry, particleMaterial);
+            rightParticleSystem = new THREE.Points(particleGeometry, particleMaterial);
+            scene.add(leftParticleSystem);
+            scene.add(rightParticleSystem);
+        }
+
+        function updateLabelTexture() {
+            if (labelMesh) scene.remove(labelMesh);
+            const aspect = window.innerWidth / window.innerHeight;
+            const labelCanvas = document.createElement('canvas');
+            labelCanvas.width = 2048;
+            labelCanvas.height = 2048 * (window.innerHeight / window.innerWidth);
+            const ctx = labelCanvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, labelCanvas.width, labelCanvas.height);
+            ctx.font = '24px Arial';
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            const prog = progressions[progression];
+            const gridCols = prog.gridCols;
+            const gridRows = prog.gridRows;
+            const colWidthPx = labelCanvas.width / gridCols;
+            const rowHeightPx = labelCanvas.height / gridRows;
+
+            if (prog.order) {
+                let chordOrder = getChordOrder(prog.order, gridCols, gridRows, prog.chords.length);
+                chordOrder.forEach((pos, i) => {
+                    if (i >= prog.chords.length) return;
+                    const col = pos[0];
+                    const row = pos[1];
+                    const chordIndex = i;
+                    const chord = prog.chords[chordIndex];
+                    const x = (col + 0.5) * colWidthPx;
+                    const y = (row + 0.5) * rowHeightPx;
+                    ctx.fillText(`${chord.root} ${chord.type}`, x, y - 10);
+                    const rightChord = { ...chord };
+                    rightChord.index = Math.min(rightChord.index + 12, chordNotes.length - 1);
+                    rightChord.root = chordNotes[rightChord.index].note;
+                    ctx.fillText(`${rightChord.root} ${chord.type}`, x, y + 10);
+                });
+            } else {
+                for (let row = 0; row < gridRows; row++) {
+                    for (let col = 0; col < gridCols; col++) {
+                        const cellIndex = row * gridCols + col;
+                        if (cellIndex >= prog.chords.length) continue;
+                        const chordIndex = cellIndex;
+                        const chord = prog.chords[chordIndex];
+                        const x = (col + 0.5) * colWidthPx;
+                        const y = (row + 0.5) * rowHeightPx;
+                        ctx.fillText(`${chord.root} ${chord.type}`, x, y - 10);
+                        const rightChord = { ...chord };
+                        rightChord.index = Math.min(rightChord.index + 12, chordNotes.length - 1);
+                        rightChord.root = chordNotes[rightChord.index].note;
+                        ctx.fillText(`${rightChord.root} ${chord.type}`, x, y + 10);
+                    }
+                }
+            }
+
+            const labelTexture = new THREE.CanvasTexture(labelCanvas);
+            labelMaterial = new THREE.MeshBasicMaterial({
+                map: labelTexture,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            const labelGeometry = new THREE.PlaneGeometry(2 * aspect, 2);
+            labelMesh = new THREE.Mesh(labelGeometry, labelMaterial);
+            labelMesh.position.z = -0.5;
+            scene.add(labelMesh);
+        }
+
+        function getChordOrder(order, gridCols, gridRows, numChords) {
+            let chordOrder = [];
+            if (order === 'clockwise') {
+                chordOrder = [
+                    [0, 0], [1, 0], [2, 0], [3, 0],
+                    [3, 1], [2, 1], [1, 1], [0, 1]
+                ]; // Assume 4x2, adjust if needed
+                chordOrder = chordOrder.slice(0, numChords);
+            } else if (order === 'linear') {
+                for (let i = 0; i < numChords; i++) {
+                    let col = i % gridCols;
+                    let row = Math.floor(i / gridCols);
+                    chordOrder.push([col, row]);
+                }
+            } else if (order === 'snake') {
+                for (let row = 0; row < gridRows; row++) {
+                    for (let col = 0; col < gridCols; col++) {
+                        let c = (row % 2 === 0) ? col : gridCols - 1 - col;
+                        chordOrder.push([c, row]);
+                    }
+                }
+                chordOrder = chordOrder.slice(0, numChords);
+            }
+            return chordOrder;
+        }
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720, facingMode: 'user' }
+                });
+                video = document.getElementById('video');
+                video.srcObject = stream;
+                video.playsInline = true;
+                await video.play();
+                videoTexture = new THREE.VideoTexture(video);
+                updateInfo('Camera initialized successfully');
+                return true;
+            } catch (error) {
+                console.error('Camera initialization failed:', error);
+                updateInfo('Camera access failed - using default background');
+                const canvas = document.createElement('canvas');
+                canvas.width = 1280;
+                canvas.height = 720;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                videoTexture = new THREE.CanvasTexture(canvas);
+                return false;
+            }
+        }
+
+        async function initHandTracking() {
+            try {
+                handDetector = await window.handPoseDetection.createDetector(
+                    window.handPoseDetection.SupportedModels.MediaPipeHands,
+                    {
+                        runtime: 'mediapipe',
+                        modelType: 'full',
+                        maxHands: 2,
+                        solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@latest'
+                    }
+                );
+                updateInfo('Hand tracking initialized');
+                detectHands();
+            } catch (error) {
+                console.error('Hand tracking initialization failed:', error);
+                updateInfo('Hand tracking failed');
+            }
+        }
+
+        function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioContext.createGain();
+                masterGain.gain.setValueAtTime(volume, audioContext.currentTime);
+                masterGain.connect(audioContext.destination);
+                audioActivated = true;
+                audioEnabled = true;
+                document.getElementById('activateAudio').disabled = true;
+                document.getElementById('toggleAudio').textContent = 'Disable Audio';
+                updateInfo('Audio initialized');
+                return true;
+            } catch (error) {
+                console.error('Audio initialization failed:', error);
+                updateInfo('Audio initialization failed');
+                return false;
+            }
+        }
+
+        function updateRegionLabels() {
+            const regionLabels = document.getElementById('region-labels');
+            regionLabels.innerHTML = '';
+            const prog = progressions[progression];
+            const zoneCount = prog.chords.length;
+            const zoneWidth = window.innerWidth / zoneCount;
+
+            if (prog.order) {
+                let chordOrder = getChordOrder(prog.order, prog.gridCols, prog.gridRows, prog.chords.length);
+                chordOrder.forEach((pos, i) => {
+                    if (i >= prog.chords.length) return;
+                    const chordIndex = i;
+                    const chord = prog.chords[chordIndex];
+                    const leftLabel = document.createElement('div');
+                    leftLabel.className = 'region-label left-region-label';
+                    leftLabel.style.left = `${i * zoneWidth}px`;
+                    leftLabel.style.width = `${zoneWidth}px`;
+                    leftLabel.style.top = '10px';
+                    leftLabel.textContent = `${chord.root} ${chord.type}`;
+                    regionLabels.appendChild(leftLabel);
+
+                    const rightChord = { ...chord };
+                    rightChord.index = Math.min(rightChord.index + 12, chordNotes.length - 1);
+                    rightChord.root = chordNotes[rightChord.index].note;
+                    const rightLabel = document.createElement('div');
+                    rightLabel.className = 'region-label right-region-label';
+                    rightLabel.style.left = `${i * zoneWidth}px`;
+                    rightLabel.style.width = `${zoneWidth}px`;
+                    rightLabel.style.top = '40px';
+                    rightLabel.textContent = `${rightChord.root} ${chord.type}`;
+                    regionLabels.appendChild(rightLabel);
+                });
+            } else {
+                prog.chords.forEach((chord, i) => {
+                    const leftLabel = document.createElement('div');
+                    leftLabel.className = 'region-label left-region-label';
+                    leftLabel.style.left = `${i * zoneWidth}px`;
+                    leftLabel.style.width = `${zoneWidth}px`;
+                    leftLabel.style.top = '10px';
+                    leftLabel.textContent = `${chord.root} ${chord.type}`;
+                    regionLabels.appendChild(leftLabel);
+
+                    const rightChord = { ...chord };
+                    rightChord.index = Math.min(rightChord.index + 12, chordNotes.length - 1);
+                    rightChord.root = chordNotes[rightChord.index].note;
+                    const rightLabel = document.createElement('div');
+                    rightLabel.className = 'region-label right-region-label';
+                    rightLabel.style.left = `${i * zoneWidth}px`;
+                    rightLabel.style.width = `${zoneWidth}px`;
+                    rightLabel.style.top = '40px';
+                    rightLabel.textContent = `${rightChord.root} ${chord.type}`;
+                    regionLabels.appendChild(rightLabel);
+                });
+            }
+        }
+
+        function detectOnsets(channelData, sampleRate, hopSize) {
+            const rmsThreshold = 0.05; // Lower threshold for onset detection
+            const minOnsetInterval = 0.2; // Minimum time between onsets in seconds
+            const onsets = [0]; // Start with time 0
+            let previousRms = 0;
+            let lastOnsetTime = 0;
+            for (let i = 0; i < channelData.length; i += hopSize) {
+                let sum = 0;
+                const windowSize = Math.min(hopSize, channelData.length - i);
+                for (let j = 0; j < windowSize; j++) {
+                    sum += channelData[i + j] ** 2;
+                }
+                const rms = Math.sqrt(sum / windowSize);
+                const currentTime = i / sampleRate;
+                if (rms - previousRms > rmsThreshold && currentTime - lastOnsetTime > minOnsetInterval) {
+                    onsets.push(currentTime);
+                    lastOnsetTime = currentTime;
+                }
+                previousRms = rms;
+            }
+            onsets.push(channelData.length / sampleRate); // Add end time
+            return onsets;
+        }
+
+        function computePCP(segment, sampleRate) {
+            const size = segment.length;
+            const re = segment.slice(); // Copy to avoid modifying original
+            const im = new Array(size).fill(0);
+            // Apply Hann window
+            for (let i = 0; i < size; i++) {
+                re[i] *= 0.5 * (1 - Math.cos(2 * Math.PI * i / size));
+            }
+            // Perform in-place FFT
+            FFT(re, im);
+            // Bit reversal to correct order
+            const bits = Math.log2(size);
+            const out_re = new Array(size);
+            const out_im = new Array(size);
+            for (let i = 0; i < size; i++) {
+                const rev = bitReverse(i, bits);
+                out_re[i] = re[rev];
+                out_im[i] = im[rev];
+            }
+            const phasors = out_re.map((r, i) => [r, out_im[i]]);
+            const mag = phasors.map(p => Math.sqrt(p[0] ** 2 + p[1] ** 2));
+            const pcp = new Array(12).fill(0);
+            const fref = 130.81; // C3
+            for (let k = 1; k < mag.length; k++) {
+                const f = k * sampleRate / size;
+                if (f < fref || f > fref * 32) continue;
+                const p = (12 * Math.log2(f / fref)) % 12;
+                const ip = Math.floor(p);
+                pcp[ip] += mag[k] ** 2;
+            }
+            const sum = pcp.reduce((a, b) => a + b, 0);
+            if (sum > 0) {
+                pcp.forEach((v, i) => pcp[i] /= sum);
+            }
+            return pcp;
+        }
+
+        function matchChord(pcp) {
+            let maxScore = -Infinity;
+            let bestRoot = 0;
+            let bestType = '';
+            for (let root = 0; root < 12; root++) {
+                for (let type in chordTemplates) {
+                    const template = chordTemplates[type];
+                    const rotated = template.slice(root).concat(template.slice(0, root));
+                    let score = 0;
+                    for (let i = 0; i < 12; i++) {
+                        score += pcp[i] * rotated[i];
+                    }
+                    if (score > maxScore) {
+                        maxScore = score;
+                        bestRoot = root;
+                        bestType = type;
+                    }
+                }
+            }
+            if (maxScore < 0.05) {
+                // Fallback to note detection if no chord is detected
+                const maxPcpIndex = pcp.reduce((iMax, x, i, arr) => x > arr[iMax] ? i : iMax, 0);
+                bestRoot = maxPcpIndex;
+                bestType = 'major'; // Assume major chord for single note
+            }
+            const rootNote = chordNotes[bestRoot].note.replace(/\d/, '');
+            return {root: rootNote, type: bestType};
+        }
+
+        function estimateBPM(onsets) {
+            if (onsets.length < 2) return null;
+            const intervals = [];
+            for (let i = 1; i < onsets.length; i++) {
+                intervals.push(onsets[i] - onsets[i-1]);
+            }
+            intervals.sort((a, b) => a - b);
+            const medianInterval = intervals[Math.floor(intervals.length / 2)];
+            const bpm = 60 / medianInterval;
+            return Math.round(bpm);
+        }
+
+        function playTick() {
+            const osc = audioContext.createOscillator();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(880, audioContext.currentTime);
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.05);
+            osc.connect(gain);
+            gain.connect(masterGain);
+            osc.start(audioContext.currentTime);
+            osc.stop(audioContext.currentTime + 0.05);
+        }
+
+        function updateParticles(handedness, x, y, color, size) {
+            const particles = handedness === 'Left' ? leftParticles : rightParticles;
+            const particleSystem = handedness === 'Left' ? leftParticleSystem : rightParticleSystem;
+
+            particles.push({
+                position: new THREE.Vector3(x, y, 0),
+                velocity: new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.02,
+                    (Math.random() - 0.5) * 0.02,
+                    0
+                ),
+                color: new THREE.Color(color),
+                size: size,
+                life: 1.0
+            });
+
+            const positions = [];
+            const colors = [];
+            const sizes = [];
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.add(p.velocity);
+                p.life -= 0.02;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                positions.push(p.position.x, p.position.y, p.position.z);
+                colors.push(p.color.r, p.color.g, p.color.b);
+                sizes.push(p.size * p.life);
+            }
+
+            particleSystem.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            particleSystem.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            particleSystem.geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+            particleSystem.geometry.attributes.color.needsUpdate = true;
+            particleSystem.geometry.attributes.size.needsUpdate = true;
+        }
+
+        function playChord(noteIndices, gestureType, handedness, x, y) {
+            if (!audioEnabled || !audioContext) {
+                console.log('Audio not enabled or context not initialized');
+                return;
+            }
+            const chordNotesSelected = noteIndices.map(idx => chordNotes[idx]).filter(note => note);
+            console.log(`Playing chord: ${chordNotesSelected.map(n => n.note).join(', ')}, Gesture: ${gestureType}, Hand: ${handedness}, Position: (${x.toFixed(2)}, ${y.toFixed(2)})`);
+            const chord = progressions[progression].chords[currentChordIndex];
+            const particleSize = 0.05 + y * 0.1;
+            const chordColor = handedness === 'Left' ? chord.color : new THREE.Color(chord.color).offsetHSL(0.1, 0, 0).getHex();
+            updateParticles(handedness, x, y, chordColor, particleSize);
+
+            chordNotesSelected.forEach(note => {
+                if (waveType === 'guitar') {
+                    const osc1 = audioContext.createOscillator();
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.setValueAtTime(note.freq, audioContext.currentTime);
+                    const osc2 = audioContext.createOscillator();
+                    osc2.type = 'sawtooth';
+                    osc2.frequency.setValueAtTime(note.freq * 1.005, audioContext.currentTime);
+                    const gain = audioContext.createGain();
+                    gain.gain.setValueAtTime(0, audioContext.currentTime);
+                    gain.gain.linearRampToValueAtTime(1.2 / chordNotesSelected.length, audioContext.currentTime + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + attack + release);
+                    const filter = audioContext.createBiquadFilter();
+                    filter.type = 'lowpass';
+                    filter.frequency.setValueAtTime(2000, audioContext.currentTime);
+                    filter.Q.setValueAtTime(1, audioContext.currentTime);
+                    osc1.connect(filter);
+                    osc2.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(masterGain);
+                    osc1.start();
+                    osc2.start();
+                    osc1.stop(audioContext.currentTime + attack + release);
+                    osc2.stop(audioContext.currentTime + attack + release);
+                } else {
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    osc.type = waveType;
+                    osc.frequency.setValueAtTime(note.freq, audioContext.currentTime);
+                    gain.gain.setValueAtTime(0, audioContext.currentTime);
+                    gain.gain.linearRampToValueAtTime(1 / chordNotesSelected.length, audioContext.currentTime + attack);
+                    gain.gain.linearRampToValueAtTime(0, audioContext.currentTime + attack + release);
+                    osc.connect(gain);
+                    gain.connect(masterGain);
+                    osc.start();
+                    osc.stop(audioContext.currentTime + attack + release);
+                }
+
+                const baseNote = note.note.replace(/\d/, n => Math.min(parseInt(n), 8).toString());
+                const mesh = pianoKeyMeshes.find(m => m.key.note === baseNote);
+                if (mesh) {
+                    mesh.mesh.material.color.setHex(handedness === 'Left' ? 0x0000FF : 0xFF0000);
+                    mesh.mesh.position.z += 0.01;
+                    setTimeout(() => {
+                        mesh.mesh.material.color.setHex(baseNote.includes('#') ? 0x000000 : 0xFFFFFF);
+                        mesh.mesh.position.z -= 0.01;
+                    }, (attack + release) * 1000);
+                }
+            });
+        }
+
+        function scheduleChord(noteIndices, startTime, duration) {
+            const chordNotesSelected = noteIndices.map(idx => chordNotes[idx]).filter(note => note);
+            const local_attack = Math.min(attack, duration * 0.2);
+            const local_release = Math.min(release, duration * 0.3);
+            const holdTime = duration - local_attack - local_release;
+            let effective_hold = holdTime;
+            if (holdTime < 0) {
+                effective_hold = 0;
+                const total_ramp = local_attack + local_release - duration; // overflow
+                local_attack -= total_ramp * (local_attack / (local_attack + local_release));
+                local_release -= total_ramp * (local_release / (local_attack + local_release));
+            }
+
+            chordNotesSelected.forEach(note => {
+                if (waveType === 'guitar') {
+                    const osc1 = audioContext.createOscillator();
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.value = note.freq;
+                    const osc2 = audioContext.createOscillator();
+                    osc2.type = 'sawtooth';
+                    osc2.frequency.value = note.freq * 1.005;
+                    const gain = audioContext.createGain();
+                    const filter = audioContext.createBiquadFilter();
+                    filter.type = 'lowpass';
+                    filter.frequency.value = 2000;
+                    filter.Q.value = 1;
+                    osc1.connect(filter);
+                    osc2.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(masterGain);
+                    gain.gain.setValueAtTime(0, startTime);
+                    gain.gain.linearRampToValueAtTime(1.2 / chordNotesSelected.length, startTime + local_attack);
+                    gain.gain.setValueAtTime(1.2 / chordNotesSelected.length, startTime + local_attack + effective_hold);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+                    osc1.start(startTime);
+                    osc2.start(startTime);
+                    osc1.stop(startTime + duration + 0.1);
+                    osc2.stop(startTime + duration + 0.1);
+                } else {
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    osc.type = waveType;
+                    osc.frequency.value = note.freq;
+                    osc.connect(gain);
+                    gain.connect(masterGain);
+                    gain.gain.setValueAtTime(0, startTime);
+                    gain.gain.linearRampToValueAtTime(1 / chordNotesSelected.length, startTime + local_attack);
+                    gain.gain.setValueAtTime(1 / chordNotesSelected.length, startTime + local_attack + effective_hold);
+                    gain.gain.linearRampToValueAtTime(0, startTime + duration);
+                    osc.start(startTime);
+                    osc.stop(startTime + duration + 0.1);
+                }
+                // Piano key animation
+                const baseNote = note.note.replace(/\d/, n => Math.min(parseInt(n), 8).toString());
+                const mesh = pianoKeyMeshes.find(m => m.key.note === baseNote);
+                if (mesh) {
+                    setTimeout(() => {
+                        mesh.mesh.material.color.setHex(0xFF0000); // or some color
+                        mesh.mesh.position.z += 0.01;
+                    }, (startTime - audioContext.currentTime) * 1000);
+                    setTimeout(() => {
+                        mesh.mesh.material.color.setHex(baseNote.includes('#') ? 0x000000 : 0xFFFFFF);
+                        mesh.mesh.position.z -= 0.01;
+                    }, (startTime - audioContext.currentTime + duration) * 1000);
+                }
+            });
+        }
+
+        function getChordNotes(rootIndex, chordType, octaveShift) {
+            const intervals = {
+                major: [0, 4, 7],
+                minor: [0, 3, 7],
+                dim: [0, 3, 6],
+                major7: [0, 4, 7, 11],
+                minor7: [0, 3, 7, 10],
+                dom7: [0, 4, 7, 10]
+            };
+            return intervals[chordType].map(interval => {
+                const targetIndex = rootIndex + interval + octaveShift;
+                return targetIndex < chordNotes.length ? targetIndex : null;
+            }).filter(idx => idx !== null);
+        }
+
+        function getProgressionChord(x, y, handedness) {
+            const prog = progressions[progression];
+            const gridCols = prog.gridCols;
+            const gridRows = prog.gridRows;
+            const colWidth = 1 / gridCols;
+            const rowHeight = 1 / gridRows;
+            const colIndex = Math.floor(x / colWidth);
+            const rowIndex = Math.floor(y / rowHeight);
+            let cellIndex, chordIndex;
+            let chordOrder;
+
+            if (prog.order) {
+                chordOrder = getChordOrder(prog.order, gridCols, gridRows, prog.chords.length);
+                const posIndex = chordOrder.findIndex(([c, r]) => c === colIndex && r === rowIndex);
+                cellIndex = posIndex;
+                if (cellIndex === -1 || cellIndex >= prog.chords.length) {
+                    return null;
+                }
+                chordIndex = cellIndex;
+            } else {
+                cellIndex = rowIndex * gridCols + colIndex;
+                if (cellIndex >= prog.chords.length) {
+                    return null;
+                }
+                chordIndex = cellIndex;
+            }
+
+            if (lastX !== -1 && lastY !== -1 && 
+                Math.abs(x - lastX) < 0.02 && Math.abs(y - lastY) < 0.02 && 
+                currentChordIndex === chordIndex) {
+                console.log(`Hysteresis: keeping chord index ${chordIndex} (x=${x.toFixed(2)}, y=${y.toFixed(2)}, lastX=${lastX.toFixed(2)}, lastY=${lastY.toFixed(2)})`);
+                return prog.chords[currentChordIndex];
+            }
+
+            const now = performance.now();
+            if (now - lastChordChangeTime < 100) {
+                console.log(`Debounce: skipping chord change (time=${now - lastChordChangeTime}ms)`);
+                return prog.chords[currentChordIndex];
+            }
+
+            lastX = x;
+            lastY = y;
+            lastChordChangeTime = now;
+            currentChordIndex = chordIndex;
+            gridMaterial.uniforms.activeCell.value = cellIndex;
+
+            // Set next cell for highlighted songs
+            if (prog.order) {
+                const nextChordIndex = (chordIndex + 1) % prog.chords.length;
+                const nextPos = chordOrder[nextChordIndex];
+                const nextCell = nextPos[1] * gridCols + nextPos[0];
+                gridMaterial.uniforms.nextCell.value = nextCell;
+                console.log(`Next cell: ${nextCell} (chord: ${prog.chords[nextChordIndex].root} ${prog.chords[nextChordIndex].type})`);
+            } else {
+                gridMaterial.uniforms.nextCell.value = -1; // No highlight for other progressions
+            }
+
+            let chord = { ...prog.chords[chordIndex] };
+            const octaveShift = handedness === 'Right' ? 12 : 0;
+            if (handedness === 'Right') {
+                console.log(`Right hand chord shifted by one octave`);
+            }
+            chord.index = Math.min(chord.index + octaveShift, chordNotes.length - 1);
+            if (!chordNotes[chord.index]) {
+                console.log('Invalid chord index: ' + chord.index);
+                return null;
+            }
+            chord.root = chordNotes[chord.index].note;
+            console.log(`Selected chord: ${chord.root} ${chord.type}, cell: ${cellIndex}, chordIndex: ${chordIndex}, octaveShift: ${octaveShift}`);
+            return chord;
+        }
+
+        function detectHands() {
+            if (!handDetector || !video) return;
+            handDetector.estimateHands(video).then(hands => {
+                leftHandDetected = false;
+                rightHandDetected = false;
+                leftParticles = leftParticles.filter(p => p.life > 0);
+                rightParticles = rightParticles.filter(p => p.life > 0);
+
+                console.log(`Hand detection frame: ${hands.length} hands detected`);
+                if (hands.length > 0) {
+                    hands.forEach(hand => {
+                        const { keypoints, handedness } = hand;
+                        const indexTip = keypoints.find(k => k.name === 'index_finger_tip');
+                        if (indexTip && typeof indexTip.x !== 'undefined' && typeof indexTip.y !== 'undefined') {
+                            const handPos = {
+                                x: (indexTip.x / video.videoWidth) * 2 - 1,
+                                y: -((indexTip.y / video.videoHeight) * 2 - 1),
+                                z: indexTip.z !== undefined ? indexTip.z : 0
+                            };
+                            console.log(`${handedness} hand position: x=${handPos.x.toFixed(2)}, y=${handPos.y.toFixed(2)}, z=${handPos.z.toFixed(2)}`);
+                            if (handedness === 'Left') {
+                                leftHandDetected = true;
+                                leftHandPosition = handPos;
+                                document.getElementById('left-hand-status').textContent = 'Detected';
+                            } else {
+                                rightHandDetected = true;
+                                rightHandPosition = handPos;
+                                document.getElementById('right-hand-status').textContent = 'Detected';
+                            }
+                            detectKeyPress(hand, handPos);
+                        } else {
+                            console.log(`${handedness} hand missing index_finger_tip keypoint`);
+                        }
+                        detectGestures(hand);
+                    });
+                } else {
+                    document.getElementById('left-hand-status').textContent = 'Not detected';
+                    document.getElementById('right-hand-status').textContent = 'Not detected';
+                    document.getElementById('gesture-info').textContent = 'None';
+                    document.getElementById('note-info').textContent = 'None';
+                    currentGesture = 'none';
+                    activeNotes.clear();
+                    gridMaterial.uniforms.activeCell.value = -1;
+                    gridMaterial.uniforms.nextCell.value = -1; // Clear next cell highlight
+                    console.log('No hands detected, clearing active notes');
+                }
+                updateParticles('Left', leftHandPosition.x, leftHandPosition.y, 0xFFFFFF, 0);
+                updateParticles('Right', rightHandPosition.x, rightHandPosition.y, 0xFFFFFF, 0);
+                requestAnimationFrame(detectHands);
+            }).catch(error => {
+                console.error('Hand detection error:', error);
+            });
+        }
+
+        function detectKeyPress(hand, handPos) {
+            let x = (handPos.x + 1) / 2;
+            let y = (handPos.y + 1) / 2;
+            const handedness = hand.handedness;
+            console.log(`Chord check: x=${x.toFixed(2)}, y=${y.toFixed(2)}, z=${handPos.z.toFixed(2)}, gesture=${currentGesture}, hand=${handedness}`);
+
+            const chord = getProgressionChord(x, y, handedness);
+            if (!chord) return;
+            const gestureKey = `${handedness}_${chord.root}_${chord.type}`;
+            if (currentGesture.includes('pinch') && !activeNotes.has(gestureKey)) {
+                const chordNotes = getChordNotes(chord.index, chord.type, 0);
+                activeNotes.set(gestureKey, chordNotes);
+                document.getElementById('note-info').textContent = `${chord.root} ${chord.type} (${handedness})`;
+                console.log(`Triggering chord: ${chord.root} ${chord.type}, indices: ${chordNotes.join(', ')}`);
+                playChord(chordNotes, currentGesture.includes('pinch_thumb_index') ? 'pinch' : 'pinch_thumb_middle', handedness, handPos.x, handPos.y);
+            } else if (!currentGesture.includes('pinch')) {
+                console.log(`No pinch gesture detected for ${handedness}, skipping chord trigger`);
+                activeNotes.delete(gestureKey);
+                document.getElementById('note-info').textContent = 'None';
+                gridMaterial.uniforms.activeCell.value = -1;
+                gridMaterial.uniforms.nextCell.value = -1; // Clear next cell highlight
+            }
+        }
+
+        function detectGestures(hand) {
+            const now = performance.now();
+            if (now - lastGestureTime < 50) return;
+            const { keypoints, handedness } = hand;
+            const thumbTip = keypoints.find(k => k.name === 'thumb_tip');
+            const indexTip = keypoints.find(k => k.name === 'index_finger_tip');
+            const middleTip = keypoints.find(k => k.name === 'middle_finger_tip');
+            const wrist = keypoints.find(k => k.name === 'wrist');
+            if (!thumbTip || !indexTip || !middleTip || !wrist) {
+                console.log(`Missing keypoints for ${handedness} hand: thumb=${!!thumbTip}, index=${!!indexTip}, middle=${!!middleTip}, wrist=${!!wrist}`);
+                document.getElementById('gesture-info').textContent = 'None';
+                currentGesture = 'none';
+                activeNotes.forEach((_, key) => {
+                    if (key.startsWith(handedness)) {
+                        activeNotes.delete(key);
+                    }
+                });
+                document.getElementById('note-info').textContent = 'None';
+                gridMaterial.uniforms.activeCell.value = -1;
+                gridMaterial.uniforms.nextCell.value = -1; // Clear next cell highlight
+                return;
+            }
+            const dxThumbIndex = thumbTip.x - indexTip.x;
+            const dyThumbIndex = thumbTip.y - indexTip.y;
+            const distanceThumbIndex = Math.sqrt(dxThumbIndex * dxThumbIndex + dyThumbIndex * dyThumbIndex);
+            const dxThumbMiddle = thumbTip.x - middleTip.x;
+            const dyThumbMiddle = thumbTip.y - middleTip.y;
+            const distanceThumbMiddle = Math.sqrt(dxThumbMiddle * dxThumbMiddle + dyThumbMiddle * dyThumbMiddle);
+            const handSize = Math.sqrt(
+                Math.pow(wrist.x - middleTip.x, 2) + 
+                Math.pow(wrist.y - middleTip.y, 2)
+            );
+            const normalizedDistanceThumbIndex = distanceThumbIndex / handSize;
+            const normalizedDistanceThumbMiddle = distanceThumbMiddle / handSize;
+            console.log(`Gesture check for ${handedness}: thumb-index=${normalizedDistanceThumbIndex.toFixed(2)}, thumb-middle=${normalizedDistanceThumbMiddle.toFixed(2)}`);
+            if (normalizedDistanceThumbIndex < 0.2) {
+                document.getElementById('gesture-info').textContent = `Pinch Thumb-Index (${handedness})`;
+                lastGestureTime = now;
+                currentGesture = `pinch_thumb_index_${handedness}`;
+                console.log(`Detected gesture: pinch_thumb_index_${handedness}`);
+            } else if (normalizedDistanceThumbMiddle < 0.2) {
+                document.getElementById('gesture-info').textContent = `Pinch Thumb-Middle (${handedness})`;
+                lastGestureTime = now;
+                currentGesture = `pinch_thumb_middle_${handedness}`;
+                console.log(`Detected gesture: pinch_thumb_middle_${handedness}`);
+            } else {
+                document.getElementById('gesture-info').textContent = 'None';
+                currentGesture = 'none';
+                console.log(`No pinch gesture detected for ${handedness}`);
+                activeNotes.forEach((_, key) => {
+                    if (key.startsWith(handedness)) {
+                        activeNotes.delete(key);
+                    }
+                });
+                document.getElementById('note-info').textContent = 'None';
+                gridMaterial.uniforms.activeCell.value = -1;
+                gridMaterial.uniforms.nextCell.value = -1; // Clear next cell highlight
+            }
+        }
+
+        function updateInfo(message) {
+            if (message) {
+                document.getElementById('info').textContent = message;
+                return;
+            }
+            const songDisplay = document.getElementById('song').value !== 'none' 
+                ? `Song: ${document.getElementById('song').options[document.getElementById('song').selectedIndex].text}` 
+                : `Progression: ${progression}`;
+            document.getElementById('info').textContent = 
+                `Volume: ${volume.toFixed(2)} | Wave: ${waveType} | ${songDisplay} | ` +
+                `Attack: ${attack.toFixed(2)}s | Release: ${release.toFixed(2)}s`;
+        }
+
+        async function init() {
+            await initCamera();
+            initThreeJS();
+            await initHandTracking();
+            updateRegionLabels();
+
+            document.getElementById('activateAudio').addEventListener('click', async () => {
+                if (!audioContext) {
+                    initAudio();
+                }
+            });
+
+            document.getElementById('toggleAudio').addEventListener('click', async () => {
+                if (!audioContext) {
+                    updateInfo('Please activate audio first');
+                    return;
+                }
+                if (audioEnabled) {
+                    audioContext.suspend();
+                    audioEnabled = false;
+                    document.getElementById('toggleAudio').textContent = 'Enable Audio';
+                } else {
+                    await audioContext.resume();
+                    audioEnabled = true;
+                    document.getElementById('toggleAudio').textContent = 'Disable Audio';
+                }
+                updateInfo();
+            });
+
+            document.getElementById('volume').addEventListener('input', (e) => {
+                volume = parseFloat(e.target.value);
+                if (masterGain) masterGain.gain.setValueAtTime(volume, audioContext.currentTime);
+                document.getElementById('volume-display').textContent = volume.toFixed(2);
+                updateInfo();
+            });
+
+            document.getElementById('waveType').addEventListener('change', (e) => {
+                waveType = e.target.value;
+                updateInfo();
+            });
+
+            document.getElementById('progression').addEventListener('change', (e) => {
+                if (document.getElementById('song').value === 'none') {
+                    progression = e.target.value;
+                    const prog = progressions[progression];
+                    if (!prog.sequence) prog.sequence = [...prog.chords];
+                    prog.chords = computeUniqueChords(prog.sequence);
+                    const numUnique = prog.chords.length;
+                    prog.gridCols = Math.ceil(Math.sqrt(numUnique));
+                    prog.gridRows = Math.ceil(numUnique / prog.gridCols);
+                    gridMaterial.uniforms.gridCols.value = prog.gridCols;
+                    gridMaterial.uniforms.gridRows.value = prog.gridRows;
+                    gridMaterial.uniforms.numCells.value = numUnique;
+                    document.getElementById('order').value = prog.order || 'linear';
+                    let time = 0;
+                    const defaultDuration = 2;
+                    chordTimings = prog.sequence.map((_, i) => {
+                        const startTime = time;
+                        time += defaultDuration;
+                        return {chordIndex: i, startTime, endTime: time};
+                    });
+                    audioBuffer = null;
+                    currentChordIndex = -1;
+                    lastX = -1;
+                    lastY = -1;
+                    activeNotes.clear();
+                    document.getElementById('note-info').textContent = 'None';
+                    gridMaterial.uniforms.activeCell.value = -1;
+                    gridMaterial.uniforms.nextCell.value = -1;
+                    updateRegionLabels();
+                    updateLabelTexture();
+                    document.getElementById('simulateSong').disabled = true;
+                    document.getElementById('playSynthSong').disabled = chordTimings.length === 0;
+                    document.getElementById('playWavSynth').disabled = true;
+                    document.getElementById('playWavPiano').disabled = true;
+                    const onsets = chordTimings.map(t => t.startTime);
+                    const bpm = estimateBPM(onsets);
+                    document.getElementById('bpm-display').textContent = bpm || 'N/A';
+                    document.getElementById('startMetronome').disabled = !bpm;
+                    updateInfo();
+                }
+            });
+
+            document.getElementById('song').addEventListener('change', (e) => {
+                const songValue = e.target.value;
+                if (songValue === 'none') {
+                    progression = document.getElementById('progression').value;
+                    chordTimings = [];
+                    audioBuffer = null;
+                    document.getElementById('simulateSong').disabled = true;
+                    document.getElementById('playSynthSong').disabled = chordTimings.length === 0;
+                    document.getElementById('playWavSynth').disabled = true;
+                    document.getElementById('playWavPiano').disabled = true;
+                    document.getElementById('bpm-display').textContent = 'N/A';
+                    document.getElementById('startMetronome').disabled = true;
+                } else {
+                    progression = songValue;
+                    const prog = progressions[progression];
+                    if (!prog.sequence) prog.sequence = [...prog.chords];
+                    prog.chords = computeUniqueChords(prog.sequence);
+                    const numUnique = prog.chords.length;
+                    prog.gridCols = Math.ceil(Math.sqrt(numUnique));
+                    prog.gridRows = Math.ceil(numUnique / prog.gridCols);
+                    gridMaterial.uniforms.gridCols.value = prog.gridCols;
+                    gridMaterial.uniforms.gridRows.value = prog.gridRows;
+                    gridMaterial.uniforms.numCells.value = numUnique;
+                    if (customChordTimings[songValue]) {
+                        chordTimings = customChordTimings[songValue];
+                        audioBuffer = customAudioBuffers[songValue];
+                        document.getElementById('simulateSong').disabled = !audioBuffer;
+                        document.getElementById('playSynthSong').disabled = chordTimings.length === 0;
+                        document.getElementById('playWavSynth').disabled = !audioBuffer;
+                        document.getElementById('playWavPiano').disabled = !audioBuffer;
+                    } else {
+                        // predefined
+                        let time = 0;
+                        const defaultDuration = 2;
+                        chordTimings = prog.sequence.map((_, i) => {
+                            const startTime = time;
+                            time += defaultDuration;
+                            return {chordIndex: i, startTime, endTime: time};
+                        });
+                        audioBuffer = null;
+                        document.getElementById('simulateSong').disabled = true;
+                        document.getElementById('playSynthSong').disabled = chordTimings.length === 0;
+                        document.getElementById('playWavSynth').disabled = true;
+                        document.getElementById('playWavPiano').disabled = true;
+                    }
+                    const onsets = chordTimings.map(t => t.startTime);
+                    const bpm = estimateBPM(onsets);
+                    document.getElementById('bpm-display').textContent = bpm || 'N/A';
+                    document.getElementById('startMetronome').disabled = !bpm;
+                }
+                currentChordIndex = -1;
+                lastX = -1;
+                lastY = -1;
+                activeNotes.clear();
+                document.getElementById('note-info').textContent = 'None';
+                gridMaterial.uniforms.activeCell.value = -1;
+                gridMaterial.uniforms.nextCell.value = -1;
+                document.getElementById('order').value = progressions[progression].order || 'linear';
+                updateRegionLabels();
+                updateLabelTexture();
+                updateInfo();
+            });
+
+            document.getElementById('order').addEventListener('change', (e) => {
+                const orderValue = e.target.value;
+                const prog = progressions[progression];
+                if (prog) {
+                    prog.order = orderValue;
+                    currentChordIndex = -1;
+                    lastX = -1;
+                    lastY = -1;
+                    activeNotes.clear();
+                    document.getElementById('note-info').textContent = 'None';
+                    gridMaterial.uniforms.activeCell.value = -1;
+                    gridMaterial.uniforms.nextCell.value = -1;
+                    updateRegionLabels();
+                    updateLabelTexture();
+                    updateInfo();
+                }
+            });
+
+            document.getElementById('wavFile').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    if (!audioContext) {
+                        if (!initAudio()) {
+                            updateInfo('Failed to initialize audio for loading WAV');
+                            return;
+                        }
+                    }
+                    audioContext.decodeAudioData(ev.target.result, (buffer) => {
+                        const key = 'custom-' + customCount++;
+                        customAudioBuffers[key] = buffer;
+                        const channelData = buffer.getChannelData(0);
+                        const sampleRate = buffer.sampleRate;
+                        const windowSize = 4096;
+                        const hopSize = 2048;
+                        const numWindows = Math.floor((channelData.length - windowSize) / hopSize) + 1;
+                        let currentChord = null;
+                        let startWindow = 0;
+                        let chordSequenceWithTimes = [];
+                        for (let i = 0; i < numWindows; i++) {
+                            const segment = channelData.slice(i * hopSize, i * hopSize + windowSize);
+                            const pcp = computePCP(segment, sampleRate);
+                            const matched = matchChord(pcp);
+                            let chordStr = matched ? matched.root + ' ' + matched.type : null;
+                            if (chordStr) {
+                                if (chordStr !== currentChord) {
+                                    if (currentChord !== null) {
+                                        const startTime = startWindow * hopSize / sampleRate;
+                                        const endTime = i * hopSize / sampleRate;
+                                        chordSequenceWithTimes.push({chord: currentChord, startTime, endTime});
+                                    }
+                                    currentChord = chordStr;
+                                    startWindow = i;
+                                }
+                            }
+                        }
+                        if (currentChord !== null) {
+                            const startTime = startWindow * hopSize / sampleRate;
+                            const endTime = buffer.duration;
+                            chordSequenceWithTimes.push({chord: currentChord, startTime, endTime});
+                        }
+                        const sequence = chordSequenceWithTimes.map((item, i) => {
+                            const [root, type] = item.chord.split(' ');
+                            let index = chordNotes.findIndex(n => n.note === root + '4');
+                            if (index === -1) {
+                                console.log('Invalid root for chord: ' + root);
+                                index = 0; // Default to C4
+                            }
+                            const color = colorsPalette[i % colorsPalette.length];
+                            return { root: root + '4', type, index, color };
+                        });
+                        const uniqueChords = computeUniqueChords(sequence);
+                        let gridCols = 1;
+                        let gridRows = 1;
+                        const numUnique = uniqueChords.length;
+                        if (numUnique > 0) {
+                            gridCols = Math.ceil(Math.sqrt(numUnique));
+                            gridRows = Math.ceil(numUnique / gridCols);
+                        } else {
+                            // If no chords detected, use onset detection to divide the song
+                            const onsets = detectOnsets(channelData, sampleRate, hopSize);
+                            chordSequenceWithTimes = [];
+                            for (let i = 0; i < onsets.length - 1; i++) {
+                                chordSequenceWithTimes.push({chord: 'C major', startTime: onsets[i], endTime: onsets[i+1]});
+                            }
+                            if (chordSequenceWithTimes.length === 0) {
+                                // If no onsets, fall back to divide into 8 parts
+                                const defaultDuration = buffer.duration / 8;
+                                let time = 0;
+                                for (let i = 0; i < 8; i++) {
+                                    const startTime = time;
+                                    time += defaultDuration;
+                                    chordSequenceWithTimes.push({chord: 'C major', startTime, endTime: time});
+                                }
+                            }
+                            sequence.push({ root: 'C4', type: 'major', index: 0, color: 0x0000FF });
+                            uniqueChords.push({ root: 'C4', type: 'major', index: 0, color: 0x0000FF });
+                            gridCols = 4;
+                            gridRows = 2;
+                            updateInfo('No chords detected; using onset-based timing with default C major chord');
+                        }
+                        progressions[key] = {
+                            sequence,
+                            chords: uniqueChords,
+                            gridCols,
+                            gridRows,
+                            order: 'linear'
+                        };
+                        customChordTimings[key] = chordSequenceWithTimes.map((item, i) => ({
+                            chordIndex: i, // index in sequence
+                            startTime: item.startTime,
+                            endTime: item.endTime
+                        }));
+                        const onsets = chordSequenceWithTimes.map(item => item.startTime);
+                        const bpm = estimateBPM(onsets);
+                        const songSelect = document.getElementById('song');
+                        const customOpt = document.createElement('option');
+                        customOpt.value = key;
+                        customOpt.text = file.name.replace('.wav', '') || 'Custom Song ' + customCount;
+                        songSelect.appendChild(customOpt);
+                        songSelect.value = key;
+                        progression = key;
+                        gridMaterial.uniforms.gridCols.value = gridCols;
+                        gridMaterial.uniforms.gridRows.value = gridRows;
+                        gridMaterial.uniforms.numCells.value = uniqueChords.length;
+                        document.getElementById('order').value = 'linear';
+                        updateRegionLabels();
+                        updateLabelTexture();
+                        // Automate attack and release
+                        const durations = chordSequenceWithTimes.map(item => item.endTime - item.startTime);
+                        const avgDuration = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+                        attack = Math.min(1, Math.max(0.01, avgDuration * 0.1));
+                        release = Math.min(2, Math.max(0.01, avgDuration * 0.3));
+                        document.getElementById('attack').value = attack;
+                        document.getElementById('attack-display').textContent = attack.toFixed(2);
+                        document.getElementById('release').value = release;
+                        document.getElementById('release-display').textContent = release.toFixed(2);
+                        chordTimings = customChordTimings[key];
+                        audioBuffer = customAudioBuffers[key];
+                        document.getElementById('simulateSong').disabled = !audioBuffer;
+                        document.getElementById('playSynthSong').disabled = chordSequenceWithTimes.length === 0;
+                        document.getElementById('playWavSynth').disabled = !audioBuffer;
+                        document.getElementById('playWavPiano').disabled = !audioBuffer;
+                        document.getElementById('bpm-display').textContent = bpm || 'N/A';
+                        document.getElementById('startMetronome').disabled = !bpm;
+                        updateInfo('Custom song loaded');
+                    }).catch(err => {
+                        console.error('Failed to decode audio data:', err);
+                        updateInfo('Failed to load WAV file');
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            });
+
+            document.getElementById('simulateSong').addEventListener('click', () => {
+                if (!audioBuffer || !audioContext) return;
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                const startTime = audioContext.currentTime;
+                source.start(startTime);
+                let currentIdx = 0;
+                const prog = progressions[progression];
+                const chordOrder = getChordOrder(prog.order, prog.gridCols, prog.gridRows, prog.chords.length);
+                const highlightInterval = setInterval(() => {
+                    const songTime = audioContext.currentTime - startTime;
+                    while (currentIdx < chordTimings.length && songTime > chordTimings[currentIdx].endTime) {
+                        currentIdx++;
+                    }
+                    if (currentIdx >= chordTimings.length) {
+                        clearInterval(highlightInterval);
+                        gridMaterial.uniforms.activeCell.value = -1;
+                        gridMaterial.uniforms.nextCell.value = -1;
+                        return;
+                    }
+                    if (songTime >= chordTimings[currentIdx].startTime) {
+                        const seqChordIndex = chordTimings[currentIdx].chordIndex;
+                        const seqChord = prog.sequence[seqChordIndex];
+                        const uniqueChordIndex = prog.chords.findIndex(u => u.root === seqChord.root && u.type === seqChord.type);
+                        if (uniqueChordIndex !== -1) {
+                            const pos = chordOrder[uniqueChordIndex];
+                            const cellIndex = pos[1] * prog.gridCols + pos[0];
+                            gridMaterial.uniforms.activeCell.value = cellIndex;
+                        }
+                    }
+                }, 50);
+                source.onended = () => {
+                    clearInterval(highlightInterval);
+                    gridMaterial.uniforms.activeCell.value = -1;
+                    gridMaterial.uniforms.nextCell.value = -1;
+                };
+            });
+
+            document.getElementById('playSynthSong').addEventListener('click', () => {
+                if (!chordTimings || chordTimings.length === 0 || !audioContext) return;
+                const prog = progressions[progression];
+                const chordOrder = getChordOrder(prog.order, prog.gridCols, prog.gridRows, prog.chords.length);
+                const startBaseTime = audioContext.currentTime;
+                chordTimings.forEach((timing) => {
+                    const startTime = startBaseTime + timing.startTime;
+                    const duration = timing.endTime - timing.startTime;
+                    const seqChordIndex = timing.chordIndex;
+                    const seqChord = prog.sequence[seqChordIndex];
+                    const noteIndices = getChordNotes(seqChord.index, seqChord.type, 0);
+                    scheduleChord(noteIndices, startTime, duration);
+                    const uniqueChordIndex = prog.chords.findIndex(u => u.root === seqChord.root && u.type === seqChord.type);
+                    if (uniqueChordIndex !== -1) {
+                        const pos = chordOrder[uniqueChordIndex];
+                        const cellIndex = pos[1] * prog.gridCols + pos[0];
+                        setTimeout(() => {
+                            gridMaterial.uniforms.activeCell.value = cellIndex;
+                        }, timing.startTime * 1000);
+                        setTimeout(() => {
+                            gridMaterial.uniforms.activeCell.value = -1;
+                        }, timing.endTime * 1000);
+                    }
+                });
+            });
+
+            document.getElementById('playWavSynth').addEventListener('click', () => {
+                if (!audioBuffer || !chordTimings || !audioContext) return;
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                const startTime = audioContext.currentTime;
+                source.start(startTime);
+                chordTimings.forEach((timing) => {
+                    const synthStart = startTime + timing.startTime;
+                    const duration = timing.endTime - timing.startTime;
+                    const seqChordIndex = timing.chordIndex;
+                    const seqChord = progressions[progression].sequence[seqChordIndex];
+                    const noteIndices = getChordNotes(seqChord.index, seqChord.type, 0);
+                    scheduleChord(noteIndices, synthStart, duration);
+                });
+                let currentIdx = 0;
+                const prog = progressions[progression];
+                const chordOrder = getChordOrder(prog.order, prog.gridCols, prog.gridRows, prog.chords.length);
+                const highlightInterval = setInterval(() => {
+                    const songTime = audioContext.currentTime - startTime;
+                    while (currentIdx < chordTimings.length && songTime > chordTimings[currentIdx].endTime) {
+                        currentIdx++;
+                    }
+                    if (currentIdx >= chordTimings.length) {
+                        clearInterval(highlightInterval);
+                        gridMaterial.uniforms.activeCell.value = -1;
+                        gridMaterial.uniforms.nextCell.value = -1;
+                        return;
+                    }
+                    if (songTime >= chordTimings[currentIdx].startTime) {
+                        const seqChordIndex = chordTimings[currentIdx].chordIndex;
+                        const seqChord = prog.sequence[seqChordIndex];
+                        const uniqueChordIndex = prog.chords.findIndex(u => u.root === seqChord.root && u.type === seqChord.type);
+                        if (uniqueChordIndex !== -1) {
+                            const pos = chordOrder[uniqueChordIndex];
+                            const cellIndex = pos[1] * prog.gridCols + pos[0];
+                            gridMaterial.uniforms.activeCell.value = cellIndex;
+                        }
+                    }
+                }, 50);
+                source.onended = () => {
+                    clearInterval(highlightInterval);
+                    gridMaterial.uniforms.activeCell.value = -1;
+                    gridMaterial.uniforms.nextCell.value = -1;
+                };
+            });
+
+            document.getElementById('playWavPiano').addEventListener('click', () => {
+                if (!audioBuffer || !audioContext) return;
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                const startTime = audioContext.currentTime;
+                source.start(startTime);
+                let currentIdx = 0;
+                const prog = progressions[progression];
+                const chordOrder = getChordOrder(prog.order, prog.gridCols, prog.gridRows, prog.chords.length);
+                const highlightInterval = setInterval(() => {
+                    const songTime = audioContext.currentTime - startTime;
+                    while (currentIdx < chordTimings.length && songTime > chordTimings[currentIdx].endTime) {
+                        currentIdx++;
+                    }
+                    if (currentIdx >= chordTimings.length) {
+                        clearInterval(highlightInterval);
+                        gridMaterial.uniforms.activeCell.value = -1;
+                        gridMaterial.uniforms.nextCell.value = -1;
+                        return;
+                    }
+                    if (songTime >= chordTimings[currentIdx].startTime) {
+                        const seqChordIndex = chordTimings[currentIdx].chordIndex;
+                        const seqChord = prog.sequence[seqChordIndex];
+                        const uniqueChordIndex = prog.chords.findIndex(u => u.root === seqChord.root && u.type === seqChord.type);
+                        if (uniqueChordIndex !== -1) {
+                            const pos = chordOrder[uniqueChordIndex];
+                            const cellIndex = pos[1] * prog.gridCols + pos[0];
+                            gridMaterial.uniforms.activeCell.value = cellIndex;
+                        }
+                    }
+                }, 50);
+                chordTimings.forEach((timing) => {
+                    const animStart = (startTime + timing.startTime - audioContext.currentTime) * 1000;
+                    const durationMs = (timing.endTime - timing.startTime) * 1000;
+                    const seqChordIndex = timing.chordIndex;
+                    const seqChord = prog.sequence[seqChordIndex];
+                    const noteIndices = getChordNotes(seqChord.index, seqChord.type, 0);
+                    noteIndices.forEach((idx) => {
+                        const note = chordNotes[idx];
+                        const baseNote = note.note.replace(/\d/, n => Math.min(parseInt(n), 8).toString());
+                        const mesh = pianoKeyMeshes.find(m => m.key.note === baseNote);
+                        if (mesh) {
+                            setTimeout(() => {
+                                mesh.mesh.material.color.setHex(0xFF0000);
+                                mesh.mesh.position.z += 0.01;
+                            }, animStart);
+                            setTimeout(() => {
+                                mesh.mesh.material.color.setHex(baseNote.includes('#') ? 0x000000 : 0xFFFFFF);
+                                mesh.mesh.position.z -= 0.01;
+                            }, animStart + durationMs);
+                        }
+                    });
+                });
+                source.onended = () => {
+                    clearInterval(highlightInterval);
+                    gridMaterial.uniforms.activeCell.value = -1;
+                    gridMaterial.uniforms.nextCell.value = -1;
+                };
+            });
+
+            document.getElementById('startMetronome').addEventListener('click', () => {
+                if (metronomeInterval) {
+                    clearInterval(metronomeInterval);
+                    metronomeInterval = null;
+                    document.getElementById('startMetronome').textContent = 'Start Metronome';
+                    return;
+                }
+                const bpmDisplay = document.getElementById('bpm-display').textContent;
+                const currentBPM = parseInt(bpmDisplay);
+                if (isNaN(currentBPM)) return;
+                const beatDuration = 60 / currentBPM;
+                playTick();
+                metronomeInterval = setInterval(playTick, beatDuration * 1000);
+                document.getElementById('startMetronome').textContent = 'Stop Metronome';
+            });
+
+            document.getElementById('attack').addEventListener('input', (e) => {
+                attack = parseFloat(e.target.value);
+                document.getElementById('attack-display').textContent = attack.toFixed(2);
+                updateInfo();
+            });
+
+            document.getElementById('release').addEventListener('input', (e) => {
+                release = parseFloat(e.target.value);
+                document.getElementById('release-display').textContent = release.toFixed(2);
+                updateInfo();
+            });
+
+            document.getElementById('loading').style.display = 'none';
+
+            function animate() {
+                requestAnimationFrame(animate);
+                if (videoTexture) videoTexture.needsUpdate = true;
+                if (labelMaterial && labelMaterial.map) labelMaterial.map.needsUpdate = true;
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            const aspect = window.innerWidth / window.innerHeight;
+            videoMesh.scale.set(aspect, 1, 1);
+            gridMesh.scale.set(aspect, 1, 1);
+            labelMesh.scale.set(aspect, 1, 1);
+            updateRegionLabels();
+            updateLabelTexture();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'a') {
+                document.getElementById('toggleAudio').click();
+            }
+        });
+
+        init();
+    </script>
+</body>
+</html>
+
