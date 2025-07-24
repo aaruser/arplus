@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Pen with Multiple Textures and Shaders</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            color: white;
+            max-width: 300px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .section-title {
+            color: #FF5722;
+            font-weight: bold;
+            margin-top: 10px;
+            border-bottom: 1px solid #666;
+            padding-bottom: 5px;
+        }
+        button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            color: white;
+            z-index: 100;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            color: white;
+            z-index: 200;
+        }
+        .slider-container {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            color: white;
+        }
+        #hand-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            z-index: 100;
+            max-width: 300px;
+        }
+        #audio-controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            z-index: 100;
+            max-width: 300px;
+        }
+        input[type="range"] {
+            width: 100px;
+        }
+        .slider-value {
+            margin-left: 10px;
+            min-width: 50px;
+            text-align: right;
+        }
+        .color-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .color-swatch {
+            width: 30px;
+            height: 30px;
+            border: 2px solid #fff;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .color-swatch:hover {
+            border-color: #FF5722;
+        }
+        .color-swatch.selected {
+            border-color: #FFD700;
+        }
+        #colorPicker {
+            margin-top: 5px;
+        }
+        #imageUpload {
+            margin-top: 10px;
+        }
+        #textureList {
+            margin-top: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+            background: rgba(255,255,255,0.1);
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .texture-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            cursor: pointer;
+        }
+        .texture-item img {
+            width: 30px;
+            height: 30px;
+            margin-right: 10px;
+            border: 1px solid #fff;
+        }
+        .texture-item.selected {
+            background: rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="section-title">Magic Pen Controls</div>
+        <div class="slider-container">
+            <label for="penSize">Pen Size:</label>
+            <input type="range" id="penSize" min="0.01" max="0.1" step="0.01" value="0.02">
+            <span id="penSize-display" class="slider-value">0.02</span>
+        </div>
+        <div class="slider-container">
+            <label for="fiberDensity">Fiber Density:</label>
+            <input type="range" id="fiberDensity" min="1" max="50" step="1" value="10">
+            <span id="fiberDensity-display" class="slider-value">10</span>
+        </div>
+        <div class="slider-container">
+            <label for="fiberSpread">Fiber Spread:</label>
+            <input type="range" id="fiberSpread" min="0.01" max="0.1" step="0.01" value="0.05">
+            <span id="fiberSpread-display" class="slider-value">0.05</span>
+        </div>
+        <div class="slider-container">
+            <label for="starDensity">Star Density:</label>
+            <input type="range" id="starDensity" min="0.1" max="2.0" step="0.1" value="0.5">
+            <span id="starDensity-display" class="slider-value">0.5</span>
+        </div>
+        <div class="slider-container">
+            <label for="starTwinkleSpeed">Star Twinkle Speed:</label>
+            <input type="range" id="starTwinkleSpeed" min="0.5" max="5.0" step="0.1" value="2.0">
+            <span id="starTwinkleSpeed-display" class="slider-value">2.0</span>
+        </div>
+        <div class="section-title">Color Palette</div>
+        <div class="color-palette" id="colorPalette">
+            <div class="color-swatch selected" style="background-color: #FF0000;" data-color="1.0,0.0,0.0"></div>
+            <div class="color-swatch" style="background-color: #00FF00;" data-color="0.0,1.0,0.0"></div>
+            <div class="color-swatch" style="background-color: #0000FF;" data-color="0.0,0.0,1.0"></div>
+            <div class="color-swatch" style="background-color: #FFFF00;" data-color="1.0,1.0,0.0"></div>
+            <div class="color-swatch" style="background-color: #FF00FF;" data-color="1.0,0.0,1.0"></div>
+            <div class="color-swatch" style="background-color: #00FFFF;" data-color="0.0,1.0,1.0"></div>
+            <div class="color-swatch" style="background-color: #FFFFFF;" data-color="1.0,1.0,1.0"></div>
+            <div class="color-swatch" style="background-color: #000000;" data-color="0.0,0.0,0.0"></div>
+            <div class="color-swatch" style="background: linear-gradient(45deg, #FFFFFF, #A0A0FF);" data-color="starfield_white"></div>
+            <div class="color-swatch" style="background: linear-gradient(45deg, #000066, #3333FF);" data-color="starfield_blue"></div>
+            <div class="color-swatch" style="background: linear-gradient(45deg, #660066, #CC33CC);" data-color="starfield_purple"></div>
+            <div class="color-swatch" style="background: linear-gradient(45deg, #00CCCC, #66FFFF);" data-color="starfield_cyan"></div>
+        </div>
+        <input type="color" id="colorPicker" value="#FF0000">
+        <div class="section-title">Image Textures</div>
+        <input type="file" id="imageUpload" accept="image/*" multiple>
+        <div id="textureList"></div>
+        <button id="clearCanvas">Clear Canvas</button>
+        <button id="randomizeConfig">Randomize Config</button>
+    </div>
+    <div id="hand-info">
+        <div class="section-title">Hand Tracking</div>
+        <div>Left Hand: <span id="left-hand-status">Not detected</span></div>
+        <div>Right Hand: <span id="right-hand-status">Not detected</span></div>
+        <div>Gesture: <span id="gesture-info">None</span></div>
+    </div>
+    <div id="audio-controls">
+        <div class="section-title">Audio Controls</div>
+        <div class="slider-container">
+            <label for="masterVolume">Volume:</label>
+            <input type="range" id="masterVolume" min="0" max="1" step="0.01" value="0.5">
+            <span id="masterVolume-display" class="slider-value">0.50</span>
+        </div>
+        <div class="slider-container">
+            <label for="bassBoost">Bass Boost:</label>
+            <input type="range" id="bassBoost" min="0" max="20" step="0.1" value="0">
+            <span id="bassBoost-display" class="slider-value">0.0</span>
+        </div>
+        <div class="slider-container">
+            <label for="binauralFreq">Binaural Freq:</label>
+            <input type="range" id="binauralFreq" min="1" max="30" step="0.1" value="7.83">
+            <span id="binauralFreq-display" class="slider-value">7.83 Hz</span>
+        </div>
+        <button id="toggleAudio">Enable Audio</button>
+    </div>
+    <div id="info">Initializing...</div>
+    <div id="loading">Loading hand tracking and creating visualizer...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection@latest/dist/hand-pose-detection.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@latest/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+
+    <script>
+        let penSize = 0.02;
+        let fiberDensity = 10;
+        let fiberSpread = 0.05;
+        let starDensity = 0.5;
+        let starTwinkleSpeed = 2.0;
+        let selectedColor = new THREE.Vector3(1.0, 0.0, 0.0);
+        let time = 0;
+        let handDetector;
+        let video;
+        let leftHandPosition = { x: 0, y: 0, z: 0 };
+        let rightHandPosition = { x: 0, y: 0, z: 0 };
+        let leftHandVelocity = { x: 0, y: 0 };
+        let rightHandVelocity = { x: 0, y: 0 };
+        let leftHandDetected = false;
+        let rightHandDetected = false;
+        let lastGestureTime = 0;
+        let currentGesture = 'none';
+        let lastLeftHandPos = { x: 0, y: 0 };
+        let lastRightHandPos = { x: 0, y: 0 };
+        let drawingCanvas, drawingContext, drawingTexture;
+        let isDrawing = false;
+        let lastDrawPos = { x: 0, y: 0 };
+        let starfieldMode = 0;
+        let starfieldType = 0;
+        let imageTextureMode = 0;
+        let activeTextureIndex = -1;
+        let textures = [];
+        let shaders = [
+            { type: 0, name: 'Normal' },
+            { type: 1, name: 'Additive' },
+            { type: 2, name: 'Multiplicative' },
+            { type: 3, name: 'Pattern' }
+        ];
+        let defaultTexture;
+
+        let scene, camera, renderer;
+        let material, mesh;
+        let videoTexture;
+        let shaderUniforms;
+
+        let audioContext;
+        let masterGain;
+        let analyser;
+        let audioData;
+        let binauralOscLeft, binauralOscRight;
+        let binauralGainLeft, binauralGainRight;
+        let bassFilter;
+        let binauralFreq = 7.83;
+        let audioEnabled = false;
+
+        function hexToRgb(hex) {
+            const r = parseInt(hex.slice(1, 3), 16) / 255;
+            const g = parseInt(hex.slice(3, 5), 16) / 255;
+            const b = parseInt(hex.slice(5, 7), 16) / 255;
+            return new THREE.Vector3(r, g, b);
+        }
+
+        function createDefaultTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1;
+            canvas.height = 1;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.fillRect(0, 0, 1, 1);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function loadImageTextures(files) {
+            Array.from(files).forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const texture = new THREE.Texture(img);
+                        texture.minFilter = THREE.LinearFilter;
+                        texture.magFilter = THREE.LinearFilter;
+                        texture.needsUpdate = true;
+                        textures.push({
+                            texture,
+                            shaderType: 0,
+                            name: file.name
+                        });
+                        updateTextureList();
+                        updateInfo(`Texture ${file.name} loaded`);
+                    };
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function updateTextureList() {
+            const textureList = document.getElementById('textureList');
+            textureList.innerHTML = '';
+            textures.forEach((tex, index) => {
+                const item = document.createElement('div');
+                item.className = 'texture-item';
+                item.innerHTML = `
+                    <img src="${tex.texture.image.src}" alt="${tex.name}">
+                    <span>${tex.name} (${shaders[tex.shaderType].name})</span>
+                `;
+                if (index === activeTextureIndex) {
+                    item.classList.add('selected');
+                }
+                item.addEventListener('click', () => {
+                    activeTextureIndex = index;
+                    shaderUniforms.imageTextureMode.value = 1;
+                    shaderUniforms.starfieldMode.value = 0;
+                    imageTextureMode = 1;
+                    shaderUniforms.uImageTexture.value = tex.texture;
+                    shaderUniforms.shaderType.value = tex.shaderType;
+                    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+                    document.querySelectorAll('.texture-item').forEach(i => i.classList.remove('selected'));
+                    item.classList.add('selected');
+                    updateInfo();
+                });
+                item.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    tex.shaderType = (tex.shaderType + 1) % shaders.length;
+                    if (index === activeTextureIndex) {
+                        shaderUniforms.shaderType.value = tex.shaderType;
+                    }
+                    updateTextureList();
+                    updateInfo();
+                });
+                textureList.appendChild(item);
+            });
+        }
+
+        function randomizeConfig() {
+            function getRandom(min, max, step = 0.01) {
+                const range = max - min;
+                const steps = Math.floor(range / step);
+                return min + Math.floor(Math.random() * (steps + 1)) * step;
+            }
+
+            penSize = getRandom(0.01, 0.1, 0.01);
+            fiberDensity = getRandom(1, 50, 1);
+            fiberSpread = getRandom(0.01, 0.1, 0.01);
+            starDensity = getRandom(0.1, 2.0, 0.1);
+            starTwinkleSpeed = getRandom(0.5, 5.0, 0.1);
+
+            shaderUniforms.penSize.value = penSize;
+            shaderUniforms.fiberDensity.value = fiberDensity;
+            shaderUniforms.fiberSpread.value = fiberSpread;
+            shaderUniforms.starDensity.value = starDensity;
+            shaderUniforms.starTwinkleSpeed.value = starTwinkleSpeed;
+
+            document.getElementById('penSize').value = penSize;
+            document.getElementById('penSize-display').textContent = penSize.toFixed(2);
+            document.getElementById('fiberDensity').value = fiberDensity;
+            document.getElementById('fiberDensity-display').textContent = fiberDensity;
+            document.getElementById('fiberSpread').value = fiberSpread;
+            document.getElementById('fiberSpread-display').textContent = fiberSpread.toFixed(2);
+            document.getElementById('starDensity').value = starDensity;
+            document.getElementById('starDensity-display').textContent = starDensity.toFixed(1);
+            document.getElementById('starTwinkleSpeed').value = starTwinkleSpeed;
+            document.getElementById('starTwinkleSpeed-display').textContent = starTwinkleSpeed.toFixed(1);
+
+            updateInfo();
+        }
+
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = null;
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 1;
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+        }
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720, facingMode: 'user' }
+                });
+                video = document.createElement('video');
+                video.srcObject = stream;
+                video.playsInline = true;
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = resolve;
+                    video.play().catch(console.error);
+                });
+                videoTexture = new THREE.VideoTexture(video);
+                videoTexture.minFilter = THREE.LinearFilter;
+                videoTexture.magFilter = THREE.LinearFilter;
+                updateInfo('Camera initialized successfully');
+                return true;
+            } catch (error) {
+                console.error('Camera initialization failed:', error);
+                const canvas = document.createElement('canvas');
+                canvas.width = 16;
+                canvas.height = 9;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'rgba(0,0,0,0)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                videoTexture = new THREE.CanvasTexture(canvas);
+                updateInfo('Camera access failed - using default background');
+                return false;
+            }
+        }
+
+        function initDrawingCanvas() {
+            drawingCanvas = document.createElement('canvas');
+            drawingCanvas.width = 1280;
+            drawingCanvas.height = 720;
+            drawingContext = drawingCanvas.getContext('2d');
+            drawingContext.globalCompositeOperation = 'source-over';
+            clearCanvas();
+            drawingTexture = new THREE.CanvasTexture(drawingCanvas);
+            drawingTexture.minFilter = THREE.LinearFilter;
+            drawingTexture.magFilter = THREE.LinearFilter;
+        }
+
+        function clearCanvas() {
+            drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            drawingContext.fillStyle = 'rgba(0,0,0,0)';
+            drawingContext.fillRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            //drawingTexture.needsUpdate = true;
+            updateInfo('Canvas cleared');
+        }
+
+        function setupNeonShader() {
+            const vertexShader = `
+                varying vec2 vUv;
+                varying vec2 vOriginalUv;
+                void main() {
+                    vUv = uv;
+                    vOriginalUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `;
+
+            const fragmentShader = `
+                uniform sampler2D uTexture;
+                uniform sampler2D uDrawingTexture;
+                uniform sampler2D uImageTexture;
+                uniform float time;
+                uniform float aspectRatio;
+                uniform float penSize;
+                uniform vec3 penColor;
+                uniform int fiberDensity;
+                uniform float fiberSpread;
+                uniform int starfieldMode;
+                uniform int starfieldType;
+                uniform int imageTextureMode;
+                uniform int shaderType;
+                uniform float starDensity;
+                uniform float starTwinkleSpeed;
+                uniform float audioLevel;
+                uniform float bassLevel;
+                varying vec2 vUv;
+                varying vec2 vOriginalUv;
+
+                float random(vec2 st) {
+                    return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+                }
+
+                float noise(vec2 st) {
+                    vec2 i = floor(st);
+                    vec2 f = fract(st);
+                    float a = random(i);
+                    float b = random(i + vec2(1.0, 0.0));
+                    float c = random(i + vec2(0.0, 1.0));
+                    float d = random(i + vec2(1.0, 1.0));
+                    vec2 u = f * f * (3.0 - 2.0 * f);
+                    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+                }
+
+                float fbm(vec2 st) {
+                    float value = 0.0;
+                    float amplitude = 0.5;
+                    for (int i = 0; i < 6; i++) {
+                        value += amplitude * noise(st);
+                        st *= 2.0;
+                        amplitude *= 0.5;
+                    }
+                    return value;
+                }
+
+                float starfield(vec2 p, float seed) {
+                    vec2 st = p * 50.0 * starDensity;
+                    float n = fbm(st + vec2(time * starTwinkleSpeed));
+                    float star = smoothstep(0.8, 0.95, n) * 0.5;
+                    star *= (sin(time * starTwinkleSpeed + seed * 123.456) * 0.5 + 0.5);
+                    return star;
+                }
+
+                vec3 starfieldColor(vec2 p, float seed) {
+                    float star = starfield(p, seed);
+                    vec3 baseColor;
+                    if (starfieldType == 0) {
+                        baseColor = vec3(1.0, 1.0, 1.0);
+                    } else if (starfieldType == 1) {
+                        baseColor = mix(vec3(0.0, 0.2, 0.8), vec3(0.3, 0.5, 1.0), fbm(p * 10.0));
+                    } else if (starfieldType == 2) {
+                        baseColor = mix(vec3(0.4, 0.0, 0.4), vec3(0.8, 0.2, 0.8), fbm(p * 10.0));
+                    } else {
+                        baseColor = mix(vec3(0.0, 0.8, 0.8), vec3(0.2, 1.0, 1.0), fbm(p * 10.0));
+                    }
+                    return baseColor * star;
+                }
+
+                vec3 applyShaderEffect(vec3 textureColor, vec2 uv) {
+                    if (shaderType == 0) {
+                        return textureColor;
+                    } else if (shaderType == 1) {
+                        return textureColor * (1.0 + 0.5 * sin(time * 5.0));
+                    } else if (shaderType == 2) {
+                        return textureColor * (0.5 + 0.5 * sin(time * 3.0 + uv.x * 10.0));
+                    } else {
+                        float pattern = sin(uv.x * 20.0 + time) * cos(uv.y * 20.0 + time);
+                        return textureColor * (0.5 + 0.5 * pattern);
+                    }
+                }
+
+                void main() {
+                    vec2 uv = vUv * 2.0 - 1.0;
+                    uv.x *= aspectRatio;
+                    vec2 videoUv = vOriginalUv;
+
+                    float audioMod = 1.0 + audioLevel * 2.0;
+                    float bassMod = 1.0 + bassLevel * 0.5;
+
+                    vec3 effectColor = vec3(0.0);
+                    vec4 videoColor = texture2D(uTexture, videoUv);
+                    vec4 drawingColor = texture2D(uDrawingTexture, videoUv);
+
+                    if (imageTextureMode == 1) {
+                        vec3 textureColor = texture2D(uImageTexture, videoUv).rgb;
+                        effectColor = applyShaderEffect(textureColor, videoUv) * drawingColor.a;
+                    } else if (starfieldMode == 1) {
+                        effectColor = starfieldColor(videoUv, videoUv.x + videoUv.y);
+                        effectColor *= drawingColor.a;
+                    } else {
+                        effectColor = penColor * drawingColor.a;
+                    }
+
+                    effectColor *= 1.0 + 0.15 * sin(time * 12.0) * random(uv + time);
+                    vec3 finalColor = mix(videoColor.rgb, videoColor.rgb + effectColor, 0.7);
+                    gl_FragColor = vec4(finalColor, max(videoColor.a, length(effectColor) * 0.6));
+                }
+            `;
+
+            defaultTexture = createDefaultTexture();
+            shaderUniforms = {
+                uTexture: { value: videoTexture },
+                uDrawingTexture: { value: drawingTexture },
+                uImageTexture: { value: defaultTexture },
+                time: { value: 0 },
+                aspectRatio: { value: window.innerWidth / window.innerHeight },
+                penSize: { value: penSize },
+                penColor: { value: selectedColor },
+                fiberDensity: { value: fiberDensity },
+                fiberSpread: { value: fiberSpread },
+                starfieldMode: { value: starfieldMode },
+                starfieldType: { value: starfieldType },
+                imageTextureMode: { value: imageTextureMode },
+                shaderType: { value: 0 },
+                starDensity: { value: starDensity },
+                starTwinkleSpeed: { value: starTwinkleSpeed },
+                audioLevel: { value: 0 },
+                bassLevel: { value: 0 }
+            };
+
+            material = new THREE.ShaderMaterial({
+                uniforms: shaderUniforms,
+                vertexShader,
+                fragmentShader,
+                transparent: true,
+                blending: THREE.AdditiveBlending
+            });
+
+            const geometry = new THREE.PlaneGeometry(2, 2, 32, 32);
+            mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+        }
+
+        async function initHandTracking() {
+            try {
+                handDetector = await window.handPoseDetection.createDetector(
+                    window.handPoseDetection.SupportedModels.MediaPipeHands,
+                    {
+                        runtime: 'mediapipe',
+                        modelType: 'full',
+                        maxHands: 2,
+                        solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@latest'
+                    }
+                );
+                updateInfo('Hand tracking initialized');
+                detectHands();
+            } catch (error) {
+                console.error('Hand tracking initialization failed:', error);
+                updateInfo('Hand tracking failed - using mouse fallback');
+            }
+        }
+
+        function drawStroke(pos) {
+            if (!isDrawing) {
+                isDrawing = true;
+                lastDrawPos = pos;
+            }
+
+            const canvasX = pos.x * drawingCanvas.width;
+            const canvasY = pos.y * drawingCanvas.height;
+
+            drawingContext.fillStyle = `rgba(${selectedColor.x * 255},${selectedColor.y * 255},${selectedColor.z * 255},0.8)`;
+            for (let i = 0; i < fiberDensity; i++) {
+                const seed = i * 123.456 + performance.now() * 0.001;
+                const offsetX = (Math.sin(seed) * 2 - 1) * fiberSpread * drawingCanvas.width;
+                const offsetY = (Math.cos(seed * 1.618) * 2 - 1) * fiberSpread * drawingCanvas.height;
+                const fiberSize = penSize * drawingCanvas.width * (0.5 + Math.random() * 0.5);
+                const fiberOpacity = 0.5 + Math.random() * 0.5;
+
+                drawingContext.beginPath();
+                drawingContext.arc(
+                    canvasX + offsetX,
+                    canvasY + offsetY,
+                    fiberSize,
+                    0,
+                    Math.PI * 2
+                );
+                drawingContext.globalAlpha = fiberOpacity;
+                drawingContext.fill();
+            }
+            drawingContext.globalAlpha = 1.0;
+            drawingTexture.needsUpdate = true;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        async function detectHands() {
+            if (!handDetector || !video) return;
+            try {
+                const hands = await handDetector.estimateHands(video);
+                leftHandDetected = false;
+                rightHandDetected = false;
+
+                if (hands.length > 0) {
+                    hands.forEach(hand => {
+                        const { keypoints, handedness } = hand;
+                        const sum = keypoints.reduce((acc, { x, y }) => {
+                            acc.x += x;
+                            acc.y += y;
+                            return acc;
+                        }, { x: 0, y: 0 });
+                        const handPos = {
+                            x: (sum.x / keypoints.length / video.videoWidth) * 2 - 1,
+                            y: -((sum.y / keypoints.length / video.videoHeight) * 2 - 1)
+                        };
+
+                        if (handedness === 'Left') {
+                            leftHandDetected = true;
+                            leftHandVelocity.x = (handPos.x - lastLeftHandPos.x) * 60;
+                            leftHandVelocity.y = (handPos.y - lastLeftHandPos.y) * 60;
+                            lastLeftHandPos = handPos;
+                            leftHandPosition = handPos;
+                            document.getElementById('left-hand-status').textContent = 'Detected';
+                        } else {
+                            rightHandDetected = true;
+                            rightHandVelocity.x = (handPos.x - lastRightHandPos.x) * 60;
+                            rightHandVelocity.y = (handPos.y - lastRightHandPos.y) * 60;
+                            lastRightHandPos = handPos;
+                            rightHandPosition = handPos;
+                            document.getElementById('right-hand-status').textContent = 'Detected';
+                        }
+                    });
+
+                    updatePenPosition(hands);
+                    detectGestures(hands);
+                } else {
+                    document.getElementById('left-hand-status').textContent = 'Not detected';
+                    document.getElementById('right-hand-status').textContent = 'Not detected';
+                    document.getElementById('gesture-info').textContent = 'None';
+                    currentGesture = 'none';
+                    stopDrawing();
+                }
+            } catch (error) {
+                console.error('Hand detection error:', error);
+            }
+            requestAnimationFrame(detectHands);
+        }
+
+        function updatePenPosition(hands) {
+            hands.forEach(hand => {
+                if (hand.handedness === (currentGesture.includes('Left') ? 'Left' : 'Right') && isDrawing) {
+                    const thumbTip = hand.keypoints.find(k => k.name === 'thumb_tip');
+                    if (thumbTip) {
+                        const pos = {
+                            x: thumbTip.x / video.videoWidth,
+                            y: thumbTip.y / video.videoHeight
+                        };
+                        drawStroke(pos);
+                    }
+                }
+            });
+        }
+
+        function detectGestures(hands) {
+            const now = performance.now();
+            if (now - lastGestureTime < 500) return;
+            hands.forEach(hand => {
+                const { keypoints, handedness } = hand;
+                const thumbTip = keypoints.find(k => k.name === 'thumb_tip');
+                const indexTip = keypoints.find(k => k.name === 'index_finger_tip');
+                const middleTip = keypoints.find(k => k.name === 'middle_finger_tip');
+                if (thumbTip && indexTip && middleTip) {
+                    const dxThumbIndex = thumbTip.x - indexTip.x;
+                    const dyThumbIndex = thumbTip.y - indexTip.y;
+                    const distanceThumbIndex = Math.sqrt(dxThumbIndex * dxThumbIndex + dyThumbIndex * dyThumbIndex);
+                    const dxThumbMiddle = thumbTip.x - middleTip.x;
+                    const dyThumbMiddle = thumbTip.y - middleTip.y;
+                    const distanceThumbMiddle = Math.sqrt(dxThumbMiddle * dxThumbMiddle + dyThumbMiddle * dyThumbMiddle);
+                    const wrist = keypoints.find(k => k.name === 'wrist');
+                    if (wrist) {
+                        const handSize = Math.sqrt(
+                            Math.pow(wrist.x - middleTip.x, 2) + 
+                            Math.pow(wrist.y - middleTip.y, 2)
+                        );
+                        const normalizedDistanceThumbIndex = distanceThumbIndex / handSize;
+                        const normalizedDistanceThumbMiddle = distanceThumbMiddle / handSize;
+                        if (normalizedDistanceThumbIndex < 0.2) {
+                            const pos = {
+                                x: thumbTip.x / video.videoWidth,
+                                y: thumbTip.y / video.videoHeight
+                            };
+                            drawStroke(pos);
+                            document.getElementById('gesture-info').textContent = `Pinch (${handedness}) - Drawing`;
+                            if (audioEnabled) {
+                                playGestureSound(500);
+                            }
+                            lastGestureTime = now;
+                            currentGesture = `pinch_${handedness}`;
+                        } else if (normalizedDistanceThumbIndex > 0.4 && normalizedDistanceThumbMiddle > 0.4) {
+                            const velocity = handedness === 'Left' ? leftHandVelocity : rightHandVelocity;
+                            const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+                            if (speed > 0.5) {
+                                document.getElementById('gesture-info').textContent = `Wave (${handedness})`;
+                                lastGestureTime = now;
+                                currentGesture = 'wave';
+                                if (audioEnabled) {
+                                    playGestureSound(400);
+                                }
+                            } else if (isDrawing) {
+                                stopDrawing();
+                                document.getElementById('gesture-info').textContent = 'None';
+                                currentGesture = 'none';
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioContext.createGain();
+                masterGain.gain.value = 0.5;
+                masterGain.connect(audioContext.destination);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.connect(masterGain);
+                audioData = new Uint8Array(analyser.frequencyBinCount);
+                bassFilter = audioContext.createBiquadFilter();
+                bassFilter.type = 'lowpass';
+                bassFilter.frequency.value = 150;
+                bassFilter.Q.value = 1;
+                bassFilter.connect(analyser);
+                setupBinauralBeats();
+                document.getElementById('toggleAudio').textContent = 'Disable Audio';
+                audioEnabled = true;
+                return true;
+            } catch (error) {
+                console.error('Audio initialization failed:', error);
+                return false;
+            }
+        }
+
+        function setupBinauralBeats() {
+            binauralOscLeft = audioContext.createOscillator();
+            binauralOscRight = audioContext.createOscillator();
+            binauralOscLeft.type = 'sine';
+            binauralOscRight.type = 'sine';
+            const baseFreq = 200;
+            binauralOscLeft.frequency.value = baseFreq;
+            binauralOscRight.frequency.value = baseFreq + binauralFreq;
+            binauralGainLeft = audioContext.createGain();
+            binauralGainRight = audioContext.createGain();
+            binauralGainLeft.gain.value = 0.1;
+            binauralGainRight.gain.value = 0.1;
+            const pannerLeft = audioContext.createStereoPanner();
+            const pannerRight = audioContext.createStereoPanner();
+            pannerLeft.pan.value = -1;
+            pannerRight.pan.value = 1;
+            binauralOscLeft.connect(binauralGainLeft);
+            binauralOscRight.connect(binauralGainRight);
+            binauralGainLeft.connect(pannerLeft);
+            binauralGainRight.connect(pannerRight);
+            pannerLeft.connect(bassFilter);
+            pannerRight.connect(bassFilter);
+            binauralOscLeft.start();
+            binauralOscRight.start();
+        }
+
+        function updateBinauralFrequency(freq) {
+            if (!audioEnabled || !binauralOscRight) return;
+            binauralFreq = freq;
+            const baseFreq = binauralOscLeft.frequency.value;
+            binauralOscRight.frequency.value = baseFreq + binauralFreq;
+            document.getElementById('binauralFreq-display').textContent = binauralFreq.toFixed(2) + ' Hz';
+        }
+
+        function playGestureSound(freq) {
+            if (!audioEnabled) return;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.value = 0;
+            osc.connect(gain);
+            gain.connect(bassFilter);
+            osc.start();
+            gain.gain.setValueAtTime(0, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+            osc.stop(audioContext.currentTime + 0.6);
+        }
+
+        function updateAudioAnalysis() {
+            if (!audioEnabled || !analyser) return;
+            analyser.getByteFrequencyData(audioData);
+            let sum = 0;
+            let bassSum = 0;
+            const bassRange = Math.floor(audioData.length * 0.1);
+            for (let i = 0; i < audioData.length; i++) {
+                sum += audioData[i];
+                if (i < bassRange) {
+                    bassSum += audioData[i];
+                }
+            }
+            const avgLevel = sum / (audioData.length * 255);
+            const bassLevel = bassSum / (bassRange * 255);
+            const bassBoost = parseFloat(document.getElementById('bassBoost').value);
+            const boostedBassLevel = bassLevel * (1 + bassBoost);
+            shaderUniforms.audioLevel.value = avgLevel;
+            shaderUniforms.bassLevel.value = boostedBassLevel;
+            document.getElementById('bassBoost-display').textContent = bassBoost.toFixed(1);
+        }
+
+        function updateInfo(message) {
+            if (message) {
+                document.getElementById('info').textContent = message;
+                return;
+            }
+            let modeInfo = '';
+            if (imageTextureMode && activeTextureIndex >= 0) {
+                modeInfo = ` | Texture: ${textures[activeTextureIndex].name} (${shaders[textures[activeTextureIndex].shaderType].name})`;
+            } else if (starfieldMode) {
+                modeInfo = ` | Starfield Mode`;
+            } else {
+                modeInfo = ` | Solid Color`;
+            }
+            document.getElementById('info').textContent = 
+                `Pen Size: ${penSize.toFixed(2)} | ` +
+                `Fiber Density: ${fiberDensity} | Fiber Spread: ${fiberSpread.toFixed(2)} | ` +
+                `Star Density: ${starDensity.toFixed(1)} | Star Twinkle Speed: ${starTwinkleSpeed.toFixed(1)}${modeInfo}`;
+        }
+
+        async function init() {
+            initThreeJS();
+            const cameraSuccess = await initCamera();
+            initDrawingCanvas();
+            setupNeonShader();
+            if (cameraSuccess) {
+                await initHandTracking();
+            }
+
+            document.getElementById('penSize').addEventListener('input', (e) => {
+                penSize = parseFloat(e.target.value);
+                shaderUniforms.penSize.value = penSize;
+                document.getElementById('penSize-display').textContent = penSize.toFixed(2);
+                updateInfo();
+            });
+
+            document.getElementById('fiberDensity').addEventListener('input', (e) => {
+                fiberDensity = parseInt(e.target.value);
+                shaderUniforms.fiberDensity.value = fiberDensity;
+                document.getElementById('fiberDensity-display').textContent = fiberDensity;
+                updateInfo();
+            });
+
+            document.getElementById('fiberSpread').addEventListener('input', (e) => {
+                fiberSpread = parseFloat(e.target.value);
+                shaderUniforms.fiberSpread.value = fiberSpread;
+                document.getElementById('fiberSpread-display').textContent = fiberSpread.toFixed(2);
+                updateInfo();
+            });
+
+            document.getElementById('starDensity').addEventListener('input', (e) => {
+                starDensity = parseFloat(e.target.value);
+                shaderUniforms.starDensity.value = starDensity;
+                document.getElementById('starDensity-display').textContent = starDensity.toFixed(1);
+                updateInfo();
+            });
+
+            document.getElementById('starTwinkleSpeed').addEventListener('input', (e) => {
+                starTwinkleSpeed = parseFloat(e.target.value);
+                shaderUniforms.starTwinkleSpeed.value = starTwinkleSpeed;
+                document.getElementById('starTwinkleSpeed-display').textContent = starTwinkleSpeed.toFixed(1);
+                updateInfo();
+            });
+
+            document.getElementById('colorPicker').addEventListener('input', (e) => {
+                selectedColor = hexToRgb(e.target.value);
+                shaderUniforms.penColor.value = selectedColor;
+                shaderUniforms.starfieldMode.value = 0;
+                shaderUniforms.imageTextureMode.value = 0;
+                imageTextureMode = 0;
+                activeTextureIndex = -1;
+                shaderUniforms.uImageTexture.value = defaultTexture;
+                document.querySelectorAll('.color-swatch').forEach(swatch => swatch.classList.remove('selected'));
+                document.querySelectorAll('.texture-item').forEach(item => item.classList.remove('selected'));
+                updateInfo();
+            });
+
+            document.querySelectorAll('.color-swatch').forEach(swatch => {
+                swatch.addEventListener('click', () => {
+                    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+                    document.querySelectorAll('.texture-item').forEach(i => i.classList.remove('selected'));
+                    swatch.classList.add('selected');
+                    const colorData = swatch.dataset.color;
+                    if (colorData.startsWith('starfield')) {
+                        shaderUniforms.imageTextureMode.value = 0;
+                        imageTextureMode = 0;
+                        activeTextureIndex = -1;
+                        shaderUniforms.uImageTexture.value = defaultTexture;
+                        shaderUniforms.starfieldMode.value = 1;
+                        if (colorData === 'starfield_white') {
+                            shaderUniforms.starfieldType.value = 0;
+                        } else if (colorData === 'starfield_blue') {
+                            shaderUniforms.starfieldType.value = 1;
+                        } else if (colorData === 'starfield_purple') {
+                            shaderUniforms.starfieldType.value = 2;
+                        } else if (colorData === 'starfield_cyan') {
+                            shaderUniforms.starfieldType.value = 3;
+                        }
+                        selectedColor.set(1.0, 1.0, 1.0);
+                        shaderUniforms.penColor.value = selectedColor;
+                    } else {
+                        shaderUniforms.imageTextureMode.value = 0;
+                        imageTextureMode = 0;
+                        activeTextureIndex = -1;
+                        shaderUniforms.uImageTexture.value = defaultTexture;
+                        shaderUniforms.starfieldMode.value = 0;
+                        const color = colorData.split(',').map(Number);
+                        selectedColor.set(color[0], color[1], color[2]);
+                        shaderUniforms.penColor.value = selectedColor;
+                        document.getElementById('colorPicker').value = `#${Math.round(color[0] * 255).toString(16).padStart(2, '0')}${Math.round(color[1] * 255).toString(16).padStart(2, '0')}${Math.round(color[2] * 255).toString(16).padStart(2, '0')}`;
+                    }
+                    updateInfo();
+                });
+            });
+
+            document.getElementById('imageUpload').addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    loadImageTextures(e.target.files);
+                }
+            });
+
+            document.getElementById('clearCanvas').addEventListener('click', clearCanvas);
+
+            document.getElementById('randomizeConfig').addEventListener('click', randomizeConfig);
+
+            document.getElementById('masterVolume').addEventListener('input', (e) => {
+                if (masterGain) {
+                    masterGain.gain.value = parseFloat(e.target.value);
+                    document.getElementById('masterVolume-display').textContent = parseFloat(e.target.value).toFixed(2);
+                }
+            });
+
+            document.getElementById('bassBoost').addEventListener('input', (e) => {
+                document.getElementById('bassBoost-display').textContent = parseFloat(e.target.value).toFixed(1);
+                updateInfo();
+            });
+
+            document.getElementById('binauralFreq').addEventListener('input', (e) => {
+                const freq = parseFloat(e.target.value);
+                updateBinauralFrequency(freq);
+            });
+
+            document.getElementById('toggleAudio').addEventListener('click', () => {
+                if (audioEnabled) {
+                    if (audioContext) {
+                        if (audioContext.state === 'running') {
+                            audioContext.suspend();
+                        }
+                        if (binauralOscLeft) {
+                            binauralOscLeft.stop();
+                            binauralOscRight.stop();
+                        }
+                    }
+                    audioEnabled = false;
+                    document.getElementById('toggleAudio').textContent = 'Enable Audio';
+                } else {
+                    if (!audioContext) {
+                        initAudio();
+                    } else if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                        setupBinauralBeats();
+                    }
+                    audioEnabled = true;
+                    document.getElementById('toggleAudio').textContent = 'Disable Audio';
+                }
+            });
+
+            document.getElementById('loading').style.display = 'none';
+
+            function animate() {
+                requestAnimationFrame(animate);
+                time += 0.01;
+                shaderUniforms.time.value = time;
+                if (videoTexture) {
+                    videoTexture.needsUpdate = true;
+                }
+                if (drawingTexture) {
+                    drawingTexture.needsUpdate = true;
+                }
+                updateAudioAnalysis();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            shaderUniforms.aspectRatio.value = window.innerWidth / window.innerHeight;
+        });
+
+        window.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'a':
+                    document.getElementById('toggleAudio').click();
+                    break;
+                case 'c':
+                    clearCanvas();
+                    break;
+            }
+        });
+
+        function setupMicrophoneInput() {
+            if (!audioContext) {
+                initAudio();
+            }
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    const micSource = audioContext.createMediaStreamSource(stream);
+                    micSource.connect(bassFilter);
+                    document.getElementById('toggleAudio').textContent = 'Disable Microphone';
+                    audioEnabled = true;
+                })
+                .catch(err => {
+                    console.error('Microphone access error:', err);
+                    alert('Could not access microphone. Using generated audio instead.');
+                });
+        }
+
+        let lastTap = 0;
+        window.addEventListener('touchend', (e) => {
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            if (tapLength < 300 && tapLength > 0) {
+                setupMicrophoneInput();
+                e.preventDefault();
+            }
+            lastTap = currentTime;
+        });
+
+        init();
+    </script>
+</body>
+</html>
