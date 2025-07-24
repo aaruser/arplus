@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fractal Dragonfly Knot with Voronoi Shader</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            color: white;
+            max-width: 300px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        button { 
+            margin: 5px;
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            border-radius: 3px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #555;
+        }
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            color: white;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            color: white;
+        }
+        .slider-container {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            color: white;
+        }
+        #count-display {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        select {
+            margin: 5px;
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            border-radius: 3px;
+            padding: 5px;
+            width: 100%;
+        }
+        .section-title {
+            color: #4CAF50;
+            font-weight: bold;
+            margin-top: 10px;
+            border-bottom: 1px solid #666;
+            padding-bottom: 5px;
+        }
+        #voronoi-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            color: white;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="section-title">Dragonfly Controls</div>
+        <button id="resetCamera">Reset Camera</button>
+        <button id="toggleMesh">Toggle Mesh</button>
+        <button id="toggleFullConnect">Toggle Full Connections</button>
+        <button id="addDragonflies">Add 10 Dragonflies</button>
+        <button id="removeDragonflies">Remove 10 Dragonflies</button>
+        <button id="toggleAutoKnot">Start Auto Knot Cycle</button>
+        
+        <div class="slider-container">
+            <label for="dragonflyCount">Dragonfly Count:</label>
+            <input type="range" id="dragonflyCount" min="10" max="500" step="10" value="50">
+            <span id="count-display">50</span>
+        </div>
+        
+        <div class="section-title">Knot Parameters</div>
+        <div class="slider-container">
+            <label for="knotType">Knot Type:</label>
+            <select id="knotType">
+                <optgroup label="Basic Knots">
+                    <option value="trefoil">Trefoil (3 twists)</option>
+                    <option value="figure8">Figure Eight</option>
+                    <option value="carrick">Carrick Bend</option>
+                    <option value="granny">Granny Knot</option>
+                    <option value="turk">Turk's Head</option>
+                    <option value="celtic">Celtic Knot</option>
+                    <option value="borromean">Borromean Rings</option>
+                    <option value="hopf">Hopf Link</option>
+                    <option value="stevedore">Stevedore Knot</option>
+                    <option value="monkey">Monkey's Fist</option>
+                    <option value="butterfly">Butterfly Knot</option>
+                    <option value="chinese">Chinese Button Knot</option>
+                    <option value="solomon">Solomon's Seal</option>
+                    <option value="cinquefoil">Cinquefoil</option>
+                    <option value="square">Square Knot</option>
+                    <option value="star">Star Knot</option>
+                    <option value="spiral">Spiral Knot</option>
+                    <option value="lissajous">Lissajous Knot</option>
+                </optgroup>
+                <optgroup label="Torus Knots">
+                    <option value="torus31">Torus (3,1)</option>
+                    <option value="torus51">Torus (5,1)</option>
+                    <option value="torus52">Torus (5,2)</option>
+                    <option value="torus71">Torus (7,1)</option>
+                    <option value="torus72">Torus (7,2)</option>
+                    <option value="torus91">Torus (9,1)</option>
+                    <option value="torus92">Torus (9,2)</option>
+                </optgroup>
+                <optgroup label="Fractal Knots">
+                    <option value="fractal1">Fractal Spiral</option>
+                    <option value="fractal2">Fractal Lace</option>
+                    <option value="fractal3">Fractal Vortex</option>
+                    <option value="fractal4">Fractal Cage</option>
+                    <option value="fractal5">Fractal Helix</option>
+                    <option value="fractal6">Fractal Weave</option>
+                    <option value="fractal7">Fractal Möbius</option>
+                    <option value="fractal8">Fractal Flower</option>
+                    <option value="fractal9">Fractal Snowflake</option>
+                    <option value="fractal10">Fractal DNA</option>
+                    <option value="fractal11">Fractal Cage 2</option>
+                    <option value="fractal12">Fractal Torus Chain</option>
+                    <option value="fractal13">Fractal Infinity</option>
+                    <option value="fractal14">Fractal Celtic</option>
+                    <option value="fractal15">Fractal Spiderweb</option>
+                </optgroup>
+            </select>
+        </div>
+        
+        <div class="slider-container">
+            <label for="wingSpeed">Wing Speed:</label>
+            <input type="range" id="wingSpeed" min="0.5" max="5" step="0.1" value="2">
+        </div>
+        
+        <div class="slider-container">
+            <label for="knotTightness">Knot Tightness:</label>
+            <input type="range" id="knotTightness" min="0.1" max="2" step="0.1" value="0.8">
+        </div>
+        
+        <div class="slider-container">
+            <label for="knotSize">Knot Size:</label>
+            <input type="range" id="knotSize" min="5" max="50" step="1" value="20">
+        </div>
+        
+        <div class="slider-container">
+            <label for="fractalIterations">Fractal Iterations:</label>
+            <input type="range" id="fractalIterations" min="1" max="5" step="1" value="2">
+        </div>
+        
+        <div class="slider-container">
+            <label for="fractalScale">Fractal Scale:</label>
+            <input type="range" id="fractalScale" min="0.1" max="0.9" step="0.1" value="0.5">
+        </div>
+        
+        <div class="section-title">Mesh Settings</div>
+        <div class="slider-container">
+            <label for="meshOpacity">Mesh Opacity:</label>
+            <input type="range" id="meshOpacity" min="0" max="1" step="0.1" value="0.7">
+        </div>
+        
+        <div class="section-title">Auto Cycle</div>
+        <div class="slider-container">
+            <label for="cycleInterval">Cycle Interval (s):</label>
+            <input type="range" id="cycleInterval" min="5" max="60" step="1" value="2">
+        </div>
+    </div>
+    
+    <div id="voronoi-controls">
+        <div class="section-title">Voronoi Shader</div>
+        <div class="slider-container">
+            <label for="cellSize">Cell Size (1/n):</label>
+            <input type="range" id="cellSize" min="4" max="100" step="1" value="8">
+        </div>
+        <div class="slider-container">
+            <label for="shaderSpeed">Speed:</label>
+            <input type="range" id="shaderSpeed" min="0" max="2" step="0.01" value="0.5">
+        </div>
+        <div class="slider-container">
+            <label for="blend">Blend:</label>
+            <input type="range" id="blend" min="0" max="1" step="0.01" value="0.5">
+        </div>
+        <div class="slider-container">
+            <label for="glowIntensity">Glow Intensity:</label>
+            <input type="range" id="glowIntensity" min="0" max="5" step="0.1" value="1.5">
+        </div>
+        <div class="slider-container">
+            <label for="glowRadius">Glow Radius:</label>
+            <input type="range" id="glowRadius" min="0.01" max="0.5" step="0.01" value="0.2">
+        </div>
+        <div class="slider-container">
+            <label for="edgeGlow">Edge Glow:</label>
+            <input type="range" id="edgeGlow" min="0" max="2" step="0.05" value="0.8">
+        </div>
+        <div class="slider-container">
+            <label for="animateShader">Animate:</label>
+            <input type="checkbox" id="animateShader" checked>
+        </div>
+    </div>
+    
+    <div id="info">Initializing...</div>
+    <div id="loading">Creating fractal dragonfly knot...</div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Global variables
+        let wingSpeed = 2;
+        let knotTightness = 0.8;
+        let knotSize = 20;
+        let knotType = 'trefoil';
+        let meshOpacity = 0.7;
+        let time = 0;
+        let dragonflies = [];
+        let dragonflyCount = 50;
+        let showMesh = true;
+        let fullConnect = false;
+        let fractalIterations = 2;
+        let fractalScale = 0.5;
+        let autoKnotCycle = false;
+        let cycleInterval = 2; // seconds
+        let cycleTimer = 0;
+        let nextCycleTime = 0;
+        
+        // List of all knot types for auto cycling
+        const knotTypes = [
+            'trefoil', 'figure8', 'carrick', 'granny', 'turk', 'celtic', 'borromean', 'hopf', 'stevedore', 'monkey',
+            'butterfly', 'chinese', 'solomon', 'cinquefoil', 'square', 'star', 'spiral', 'lissajous', 'torus31',
+            'torus51', 'torus52', 'torus71', 'torus72', 'torus91', 'torus92', 'fractal1', 'fractal2', 'fractal3',
+            'fractal4', 'fractal5', 'fractal6', 'fractal7', 'fractal8', 'fractal9', 'fractal10', 'fractal11',
+            'fractal12', 'fractal13', 'fractal14', 'fractal15'
+        ];
+        
+        // Voronoi shader settings
+        const voronoiSettings = {
+            cellSize: 8,
+            speed: 0.5,
+            blend: 0.5,
+            glowIntensity: 1.5,
+            glowRadius: 0.2,
+            edgeGlow: 0.8,
+            animate: true,
+            cellColor1: { r: 0.2, g: 0.6, b: 1.0 },
+            cellColor2: { r: 1.0, g: 0.3, b: 0.7 }
+        };
+        
+        // Initialize Three.js components
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111133);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 0, 100);
+        camera.lookAt(0, 0, 0);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // Add OrbitControls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.25;
+        controls.screenSpacePanning = false;
+        controls.maxPolarAngle = Math.PI;
+        controls.minDistance = 10;
+        controls.maxDistance = 500;
+
+        // Create materials with different colors
+        const materials = [
+            new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.2, metalness: 0.8, emissive: 0x4488ff, emissiveIntensity: 0.3 }),
+            new THREE.MeshStandardMaterial({ color: 0x44ff88, roughness: 0.2, metalness: 0.8, emissive: 0x44ff88, emissiveIntensity: 0.3 }),
+            new THREE.MeshStandardMaterial({ color: 0xff8844, roughness: 0.2, metalness: 0.8, emissive: 0xff8844, emissiveIntensity: 0.3 }),
+            new THREE.MeshStandardMaterial({ color: 0xff44ff, roughness: 0.2, metalness: 0.8, emissive: 0xff44ff, emissiveIntensity: 0.3 }),
+            new THREE.MeshStandardMaterial({ color: 0xffff44, roughness: 0.2, metalness: 0.8, emissive: 0xffff44, emissiveIntensity: 0.3 })
+        ];
+
+        // Add lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        
+        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight1.position.set(1, 1, 1);
+        scene.add(directionalLight1);
+        
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight2.position.set(-1, -1, -1);
+        scene.add(directionalLight2);
+
+        // Voronoi shader material
+        const vertexShader = `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float u_time;
+            uniform float u_cellSize;
+            uniform float u_speed;
+            uniform float u_blend;
+            uniform float u_glowIntensity;
+            uniform float u_glowRadius;
+            uniform float u_edgeGlow;
+            uniform vec3 u_cellColor1;
+            uniform vec3 u_cellColor2;
+            varying vec2 vUv;
+
+            // Hash function for random numbers
+            float hash(float n) {
+                return fract(sin(n) * 43758.5453);
+            }
+
+            // 2D noise function
+            float noise(vec2 p) {
+                vec2 ip = floor(p);
+                vec2 fp = fract(p);
+                float a = hash(ip.x + ip.y * 57.0);
+                float b = hash(ip.x + 1.0 + ip.y * 57.0);
+                float c = hash(ip.x + (ip.y + 1.0) * 57.0);
+                float d = hash(ip.x + 1.0 + (ip.y + 1.0) * 57.0);
+                vec2 u = fp * fp * (3.0 - 2.0 * fp);
+                return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+            }
+
+            // Voronoi function with glow
+            vec4 voronoi(vec2 x, float cellSize) {
+                // Scale coordinates to get larger cells
+                vec2 scaledX = x * (1.0 / cellSize);
+                
+                vec2 n = floor(scaledX);
+                vec2 f = fract(scaledX);
+                
+                vec3 m = vec3(8.0);
+                vec2 cellCenter = vec2(0.0);
+                
+                for(int j = -1; j <= 1; j++) {
+                    for(int i = -1; i <= 1; i++) {
+                        vec2 g = vec2(float(i), float(j));
+                        vec2 o = vec2(hash(n.x + g.x + 57.0 * (n.y + g.y)), 
+                                    hash(n.x + g.x + 113.0 * (n.y + g.y)));
+                        
+                        // Animation
+                        o = 0.5 + 0.5 * sin(u_time * u_speed + 6.2831 * o);
+                        
+                        vec2 r = g + o - f;
+                        float d = dot(r, r);
+                        
+                        if(d < m.x) {
+                            m = vec3(d, o.x, o.y);
+                            cellCenter = (n + g + o) * cellSize;
+                        }
+                    }
+                }
+                
+                // Distance to cell center
+                float dist = sqrt(m.x) * cellSize;
+                
+                // Cell ID for color
+                float cellID = hash(n.x + n.y * 113.0);
+                
+                // Glow effect
+                float glow = u_glowIntensity * exp(-dist / u_glowRadius);
+                
+                // Edge glow
+                float edge = smoothstep(0.0, 0.05 * cellSize, dist);
+                float edgeGlow = u_edgeGlow * (1.0 - edge);
+                
+                return vec4(cellCenter, dist, glow + edgeGlow);
+            }
+
+            void main() {
+                // Calculate Voronoi pattern
+                vec4 vor = voronoi(vUv, 1.0 / u_cellSize);
+                vec2 cellCenter = vor.xy;
+                float dist = vor.z;
+                float glow = vor.w;
+                
+                // Cell color based on cell ID
+                float cellID = hash(cellCenter.x + cellCenter.y * 57.0);
+                vec3 cellColor = mix(u_cellColor1, u_cellColor2, cellID);
+                
+                // Add glow to color
+                vec3 glowingColor = cellColor * glow;
+                
+                // Final color
+                gl_FragColor = vec4(glowingColor, 1.0);
+            }
+        `;
+
+        // Mesh components with voronoi shader
+        let meshGeometry = new THREE.BufferGeometry();
+        let meshMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                u_time: { value: 0 },
+                u_cellSize: { value: voronoiSettings.cellSize },
+                u_speed: { value: voronoiSettings.speed },
+                u_blend: { value: voronoiSettings.blend },
+                u_glowIntensity: { value: voronoiSettings.glowIntensity },
+                u_glowRadius: { value: voronoiSettings.glowRadius },
+                u_edgeGlow: { value: voronoiSettings.edgeGlow },
+                u_cellColor1: { value: new THREE.Vector3(voronoiSettings.cellColor1.r, voronoiSettings.cellColor1.g, voronoiSettings.cellColor1.b) },
+                u_cellColor2: { value: new THREE.Vector3(voronoiSettings.cellColor2.r, voronoiSettings.cellColor2.g, voronoiSettings.cellColor2.b) }
+            },
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+        let mesh = new THREE.Mesh(meshGeometry, meshMaterial);
+        scene.add(mesh);
+
+        // Create a simplified wing (for better performance)
+        function createWing(size, material) {
+            const wingGeometry = new THREE.PlaneGeometry(size, size * 1.5, 3, 3); // Reduced segments
+            
+            // Shape the wing slightly
+            const position = wingGeometry.attributes.position;
+            for (let i = 0; i < position.count; i++) {
+                const x = position.getX(i);
+                const z = Math.sin(x * 2) * 0.1;
+                position.setZ(i, z);
+            }
+            position.needsUpdate = true;
+            
+            const wing = new THREE.Mesh(wingGeometry, material);
+            wing.rotation.x = Math.PI / 2;
+            return wing;
+        }
+    // Dragonfly Factory - creates optimized dragonfly models
+    const DragonflyFactory = {
+        // Create a wing with optimized geometry
+        createWing: function(size, material) {
+            const wingGeometry = new THREE.PlaneGeometry(size, size * 1.5, 3, 3);
+            
+            // Shape the wing slightly for organic look
+            const position = wingGeometry.attributes.position;
+            for (let i = 0; i < position.count; i++) {
+                const x = position.getX(i);
+                const z = Math.sin(x * 2) * 0.1;
+                position.setZ(i, z);
+            }
+            position.needsUpdate = true;
+            
+            const wing = new THREE.Mesh(wingGeometry, material);
+            wing.rotation.x = Math.PI / 2; // Orient wings horizontally
+            return wing;
+        },
+
+        // Create a simplified body part
+        createBodyPart: function(type, size, material) {
+            let geometry;
+            switch(type) {
+                case 'head':
+                    geometry = new THREE.SphereGeometry(size, 8, 8);
+                    break;
+                case 'thorax':
+                    geometry = new THREE.CylinderGeometry(size * 0.6, size * 0.2, size * 4, 6);
+                    break;
+                case 'abdomen':
+                    geometry = new THREE.CylinderGeometry(size * 0.3, size * 0.1, size * 3, 6);
+                    break;
+                default:
+                    geometry = new THREE.BoxGeometry(size, size, size);
+            }
+            
+            const part = new THREE.Mesh(geometry, material);
+            return part;
+        },
+
+        // Create a complete dragonfly
+        createDragonfly: function(material, size = 1) {
+            const group = new THREE.Group();
+            group.scale.set(size, size, size);
+            
+            // Create body parts
+            const thorax = this.createBodyPart('thorax', 1, material);
+            thorax.rotation.z = Math.PI / 2;
+            group.add(thorax);
+            
+            const head = this.createBodyPart('head', 0.5, material);
+            head.position.set(2, 0, 0);
+            group.add(head);
+            
+            const abdomen = this.createBodyPart('abdomen', 1, material);
+            abdomen.rotation.z = Math.PI / 2;
+            abdomen.position.set(-1.5, 0, 0);
+            group.add(abdomen);
+            
+            // Create wings
+            const wings = [];
+            const wingPairs = [
+                { position: [0, 0.5, 0], rotation: Math.PI / 4, size: 1.5 },
+                { position: [0, -0.5, 0], rotation: -Math.PI / 4, size: 1.5 },
+                { position: [-1, 0.5, 0], rotation: Math.PI / 3, size: 1.35 },
+                { position: [-1, -0.5, 0], rotation: -Math.PI / 3, size: 1.35 }
+            ];
+            
+            wingPairs.forEach(config => {
+                const wing = this.createWing(config.size, material);
+                wing.position.set(...config.position);
+                wing.rotation.z = config.rotation;
+                group.add(wing);
+                wings.push(wing);
+            });
+            
+            // Initialize movement parameters
+            group.userData = {
+                wings: wings,
+                position: new THREE.Vector3(),
+                velocity: new THREE.Vector3(),
+                timeOffset: Math.random() * 100,
+                size: size,
+                lastPosition: new THREE.Vector3()
+            };
+            
+            return group;
+        }
+    };
+
+    // Replace the old createDragonfly function with:
+    function createDragonfly(material, size = 1) {
+        return DragonflyFactory.createDragonfly(material, size);
+    }
+
+    // The rest of your existing code remains the same...
+        // Create a simplified dragonfly (optimized for many instances)
+        function createDragonfly1(material, size = 1) {
+            const dragonflyGroup = new THREE.Group();
+            dragonflyGroup.scale.set(size, size, size);
+            
+            // Body (simplified)
+            const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.1, 4, 6); // Reduced segments
+            const body = new THREE.Mesh(bodyGeometry, material);
+            body.rotation.z = Math.PI / 2;
+            dragonflyGroup.add(body);
+            
+            // Head (simplified)
+            const headGeometry = new THREE.SphereGeometry(0.5, 8, 8); // Reduced segments
+            const head = new THREE.Mesh(headGeometry, material);
+            head.position.set(2, 0, 0);
+            dragonflyGroup.add(head);
+            
+            // Create 4 wings (simplified)
+            const wingSize = 1.5;
+            const wing1 = createWing(wingSize, material);
+            wing1.position.set(0, 0.5, 0);
+            wing1.rotation.z = Math.PI / 4;
+            dragonflyGroup.add(wing1);
+            
+            const wing2 = createWing(wingSize, material);
+            wing2.position.set(0, -0.5, 0);
+            wing2.rotation.z = -Math.PI / 4;
+            dragonflyGroup.add(wing2);
+            
+            const wing3 = createWing(wingSize * 0.9, material);
+            wing3.position.set(-1, 0.5, 0);
+            wing3.rotation.z = Math.PI / 3;
+            dragonflyGroup.add(wing3);
+            
+            const wing4 = createWing(wingSize * 0.9, material);
+            wing4.position.set(-1, -0.5, 0);
+            wing4.rotation.z = -Math.PI / 3;
+            dragonflyGroup.add(wing4);
+            
+            // Initialize movement parameters
+            dragonflyGroup.userData = {
+                wings: [wing1, wing2, wing3, wing4],
+                position: new THREE.Vector3(),
+                velocity: new THREE.Vector3(),
+                timeOffset: Math.random() * 100,
+                size: size,
+                lastPosition: new THREE.Vector3()
+            };
+            
+            return dragonflyGroup;
+        }
+
+        // Calculate positions along different knot types with fractal variations
+        function calculateKnotPosition(index, total, timeOffset) {
+            const t = (index / total) * Math.PI * 2 + time * 0.1 * knotTightness + timeOffset;
+            
+            let x = 0, y = 0, z = 0;
+            
+            // Base position calculation
+            switch(knotType) {
+                case 'trefoil':
+                    // Trefoil knot (3 twists)
+                    x = Math.sin(t) + 0.5 * Math.sin(2 * t);
+                    y = Math.cos(t) - 0.5 * Math.cos(2 * t);
+                    z = 0.5 * Math.sin(3 * t);
+                    break;
+                    
+                case 'figure8':
+                    // Figure-eight knot
+                    x = (Math.cos(t) + Math.cos(3 * t));
+                    y = (Math.sin(t) + Math.sin(3 * t));
+                    z = Math.sin(2 * t);
+                    break;
+                    
+                case 'torus51':
+                    // Torus knot (5,1)
+                    const p = 5, q = 1;
+                    const r = Math.cos(q * t) + 2;
+                    x = r * Math.cos(p * t);
+                    y = r * Math.sin(p * t);
+                    z = -Math.sin(q * t);
+                    break;
+                    
+                case 'torus52':
+                    // Torus knot (5,2)
+                    const p2 = 5, q2 = 2;
+                    const r2 = Math.cos(q2 * t) + 2;
+                    x = r2 * Math.cos(p2 * t);
+                    y = r2 * Math.sin(p2 * t);
+                    z = -Math.sin(q2 * t);
+                    break;
+                    
+                case 'torus71':
+                    // Torus knot (7,1)
+                    const p3 = 7, q3 = 1;
+                    const r3 = Math.cos(q3 * t) + 2;
+                    x = r3 * Math.cos(p3 * t);
+                    y = r3 * Math.sin(p3 * t);
+                    z = -Math.sin(q3 * t);
+                    break;
+                    
+                case 'torus31':
+                    // Torus knot (3,1)
+                    x = (2 + Math.cos(3 * t)) * Math.cos(t);
+                    y = (2 + Math.cos(3 * t)) * Math.sin(t);
+                    z = Math.sin(3 * t);
+                    break;
+                    
+                case 'torus72':
+                    // Torus knot (7,2)
+                    x = (2 + Math.cos(7 * t)) * Math.cos(2 * t);
+                    y = (2 + Math.cos(7 * t)) * Math.sin(2 * t);
+                    z = Math.sin(7 * t);
+                    break;
+                    
+                case 'torus91':
+                    // Torus knot (9,1)
+                    x = (2 + Math.cos(9 * t)) * Math.cos(t);
+                    y = (2 + Math.cos(9 * t)) * Math.sin(t);
+                    z = Math.sin(9 * t);
+                    break;
+                    
+                case 'torus92':
+                    // Torus knot (9,2)
+                    x = (2 + Math.cos(9 * t)) * Math.cos(2 * t);
+                    y = (2 + Math.cos(9 * t)) * Math.sin(2 * t);
+                    z = Math.sin(9 * t);
+                    break;
+                    
+                case 'solomon':
+                    // Solomon's Seal knot
+                    x = Math.sin(t) * (1 + 0.3 * Math.cos(5 * t));
+                    y = Math.cos(t) * (1 + 0.3 * Math.cos(5 * t));
+                    z = 0.3 * Math.sin(5 * t);
+                    break;
+                    
+                case 'cinquefoil':
+                    // Cinquefoil knot
+                    x = (Math.sin(t) + 2 * Math.sin(2 * t));
+                    y = (Math.cos(t) - 2 * Math.cos(2 * t));
+                    z = (-Math.sin(3 * t));
+                    break;
+                    
+                case 'square':
+                    // Square knot
+                    x = (Math.sin(t) + Math.sin(3 * t));
+                    y = (Math.cos(t) - Math.cos(3 * t));
+                    z = 0.5 * Math.sin(4 * t);
+                    break;
+                    
+                case 'star':
+                    // Star knot
+                    x = Math.sin(2 * t) * (3 + Math.cos(5 * t));
+                    y = Math.cos(2 * t) * (3 + Math.cos(5 * t));
+                    z = Math.sin(5 * t);
+                    break;
+                    
+                case 'spiral':
+                    // Spiral knot
+                    const spiralT = t * 2;
+                    x = Math.cos(spiralT) * (1 + 0.5 * Math.cos(5 * spiralT));
+                    y = Math.sin(spiralT) * (1 + 0.5 * Math.cos(5 * spiralT));
+                    z = 0.5 * Math.sin(5 * spiralT);
+                    break;
+                    
+                case 'lissajous':
+                    // Lissajous knot
+                    x = Math.sin(3 * t + Math.PI/2);
+                    y = Math.sin(2 * t);
+                    z = Math.sin(t);
+                    break;
+                    
+                case 'carrick':
+                    // Carrick Bend knot
+                    x = (Math.sin(t) + 0.5 * Math.sin(3 * t));
+                    y = (Math.cos(t) - 0.5 * Math.cos(3 * t));
+                    z = 0.3 * Math.sin(2 * t);
+                    break;
+                    
+                case 'granny':
+                    // Granny Knot
+                    x = (Math.sin(t) + 0.3 * Math.sin(3 * t));
+                    y = (Math.cos(t) + 0.3 * Math.cos(3 * t));
+                    z = 0.2 * Math.sin(4 * t);
+                    break;
+                    
+                case 'turk':
+                    // Turk's Head knot
+                    const turkP = 3, turkQ = 2;
+                    const turkR = Math.cos(turkQ * t) + 2;
+                    x = turkR * Math.cos(turkP * t);
+                    y = turkR * Math.sin(turkP * t);
+                    z = -Math.sin(turkQ * t);
+                    break;
+                    
+                case 'celtic':
+                    // Celtic Knot (interwoven pattern)
+                    x = (Math.sin(t) * Math.cos(2 * t));
+                    y = (Math.cos(t) * Math.cos(2 * t));
+                    z = 0.5 * Math.sin(3 * t);
+                    break;
+                    
+                case 'borromean':
+                    // Borromean Rings (three interlocking circles)
+                    const ring = index % 3;
+                    const ringT = t + (ring * Math.PI * 2 / 3);
+                    if (ring === 0) {
+                        x = Math.cos(ringT);
+                        y = Math.sin(ringT);
+                        z = 0;
+                    } else if (ring === 1) {
+                        x = Math.cos(ringT);
+                        z = Math.sin(ringT);
+                        y = 0;
+                    } else {
+                        y = Math.cos(ringT);
+                        z = Math.sin(ringT);
+                        x = 0;
+                    }
+                    break;
+                    
+                case 'hopf':
+                    // Hopf Link (two linked circles)
+                    const hopfRing = index % 2;
+                    const hopfT = t + (hopfRing * Math.PI);
+                    if (hopfRing === 0) {
+                        x = Math.cos(hopfT);
+                        y = Math.sin(hopfT);
+                        z = 0.3;
+                    } else {
+                        x = (0.5 + 0.5 * Math.cos(hopfT)) * Math.cos(hopfT/2);
+                        y = (0.5 + 0.5 * Math.cos(hopfT)) * Math.sin(hopfT/2);
+                        z = 0.5 * Math.sin(hopfT) - 0.3;
+                    }
+                    break;
+                    
+                case 'stevedore':
+                    // Stevedore Knot
+                    x = (Math.sin(t) + 0.2 * Math.sin(5 * t));
+                    y = (Math.cos(t) + 0.2 * Math.cos(5 * t));
+                    z = 0.3 * Math.sin(3 * t);
+                    break;
+                    
+                case 'monkey':
+                    // Monkey's Fist knot
+                    const monkeyT = t * 1.5;
+                    x = Math.sin(monkeyT) * (1 + 0.5 * Math.cos(4 * monkeyT));
+                    y = Math.cos(monkeyT) * (1 + 0.5 * Math.cos(4 * monkeyT));
+                    z = 0.5 * Math.sin(4 * monkeyT);
+                    break;
+                    
+                case 'butterfly':
+                    // Butterfly Knot
+                    x = Math.sin(t) * (2 + Math.cos(4 * t));
+                    y = Math.cos(t) * (2 + Math.cos(4 * t));
+                    z = 0.5 * Math.sin(4 * t);
+                    break;
+                    
+                case 'chinese':
+                    // Chinese Button Knot
+                    const buttonT = t * 1.2;
+                    x = (Math.sin(buttonT) + 0.3 * Math.sin(3 * buttonT));
+                    y = (Math.cos(buttonT) - 0.3 * Math.cos(3 * buttonT));
+                    z = 0.4 * Math.sin(2 * buttonT);
+                    break;
+                    
+                // FRACTAL KNOTS
+                case 'fractal1': // Fractal Spiral
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i + 1);
+                        x += scale * Math.sin(iterT) * Math.cos(iterT * 3);
+                        y += scale * Math.cos(iterT) * Math.sin(iterT * 2);
+                        z += scale * Math.sin(iterT * 1.5);
+                    }
+                    break;
+                    
+                case 'fractal2': // Fractal Lace
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 2 + 1);
+                        x += scale * (Math.sin(iterT) + 0.3 * Math.sin(iterT * 3));
+                        y += scale * (Math.cos(iterT) + 0.3 * Math.cos(iterT * 5));
+                        z += scale * 0.5 * Math.sin(iterT * 2);
+                    }
+                    break;
+                    
+                case 'fractal3': // Fractal Vortex
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i + 1) * 1.5;
+                        const radius = 1 + 0.5 * Math.sin(iterT * 2);
+                        x += scale * radius * Math.cos(iterT);
+                        y += scale * radius * Math.sin(iterT);
+                        z += scale * 0.7 * Math.sin(iterT * 3);
+                    }
+                    break;
+                    
+                case 'fractal4': // Fractal Cage
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 3 + 1);
+                        x += scale * Math.sin(iterT) * (1 + 0.3 * Math.cos(iterT * 5));
+                        y += scale * Math.cos(iterT) * (1 + 0.3 * Math.cos(iterT * 7));
+                        z += scale * 0.5 * Math.sin(iterT * 3);
+                    }
+                    break;
+                    
+                case 'fractal5': // Fractal Helix
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i + 1);
+                        const radius = 1 + 0.2 * Math.sin(iterT * 4);
+                        x += scale * radius * Math.cos(iterT * 3);
+                        y += scale * radius * Math.sin(iterT * 3);
+                        z += scale * iterT / Math.PI;
+                    }
+                    break;
+                    
+                case 'fractal6': // Fractal Weave
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 2 + 1);
+                        x += scale * (Math.sin(iterT) + Math.sin(iterT * 3));
+                        y += scale * (Math.cos(iterT) - Math.cos(iterT * 3));
+                        z += scale * 0.5 * Math.sin(iterT * 2);
+                    }
+                    break;
+                    
+                case 'fractal7': // Fractal Möbius
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i + 1);
+                        const radius = 1 + 0.3 * Math.sin(iterT * 3);
+                        x += scale * radius * Math.cos(iterT);
+                        y += scale * radius * Math.sin(iterT);
+                        z += scale * radius * Math.sin(iterT / 2);
+                    }
+                    break;
+                    
+                case 'fractal8': // Fractal Flower
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 2 + 1);
+                        const petals = 5 + i;
+                        const radius = 1 + 0.5 * Math.sin(petals * iterT);
+                        x += scale * radius * Math.cos(iterT);
+                        y += scale * radius * Math.sin(iterT);
+                        z += scale * 0.3 * Math.sin(iterT * petals);
+                    }
+                    break;
+                    
+                case 'fractal9': // Fractal Snowflake
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 3 + 1);
+                        const branches = 6;
+                        const radius = 1 + 0.4 * Math.sin(branches * iterT);
+                        x += scale * radius * Math.cos(iterT);
+                        y += scale * radius * Math.sin(iterT);
+                        z += scale * 0.2 * Math.sin(iterT * branches * 2);
+                    }
+                    break;
+                    
+                case 'fractal10': // Fractal DNA
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i + 1);
+                        const twist = 10;
+                        x += scale * (Math.cos(iterT) + 0.3 * Math.cos(twist * iterT));
+                        y += scale * (Math.sin(iterT) + 0.3 * Math.sin(twist * iterT));
+                        z += scale * iterT / Math.PI;
+                    }
+                    break;
+                    
+                case 'fractal11': // Fractal Cage 2
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 4 + 1);
+                        x += scale * Math.sin(iterT) * (1 + 0.5 * Math.cos(iterT * 7));
+                        y += scale * Math.cos(iterT) * (1 + 0.5 * Math.cos(iterT * 5));
+                        z += scale * 0.5 * Math.sin(iterT * 3);
+                    }
+                    break;
+                    
+                case 'fractal12': // Fractal Torus Chain
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 2 + 1);
+                        const p = 3 + i, q = 1 + i;
+                        const radius = Math.cos(q * iterT) + 2;
+                        x += scale * radius * Math.cos(p * iterT);
+                        y += scale * radius * Math.sin(p * iterT);
+                        z += scale * -Math.sin(q * iterT);
+                    }
+                    break;
+                    
+                case 'fractal13': // Fractal Infinity
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i + 1);
+                        x += scale * Math.sin(iterT);
+                        y += scale * Math.sin(iterT) * Math.cos(iterT);
+                        z += scale * 0.5 * Math.sin(iterT * 2);
+                    }
+                    break;
+                    
+                case 'fractal14': // Fractal Celtic
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 3 + 1);
+                        x += scale * Math.sin(iterT) * Math.cos(iterT * 2);
+                        y += scale * Math.cos(iterT) * Math.cos(iterT * 2);
+                        z += scale * 0.5 * Math.sin(iterT * 3);
+                    }
+                    break;
+                    
+                case 'fractal15': // Fractal Spiderweb
+                    for (let i = 0; i < fractalIterations; i++) {
+                        const scale = Math.pow(fractalScale, i);
+                        const iterT = t * (i * 5 + 1);
+                        const arms = 8;
+                        const radius = 1 + 0.5 * Math.sin(arms * iterT);
+                        x += scale * radius * Math.cos(iterT);
+                        y += scale * radius * Math.sin(iterT);
+                        z += scale * 0.3 * Math.sin(iterT * arms * 2);
+                    }
+                    break;
+                    
+                default:
+                    // Default to trefoil
+                    x = Math.sin(t) + 0.5 * Math.sin(2 * t);
+                    y = Math.cos(t) - 0.5 * Math.cos(2 * t);
+                    z = 0.5 * Math.sin(3 * t);
+            }
+            
+            // Apply knot size scaling
+            x *= knotSize;
+            y *= knotSize;
+            z *= knotSize;
+            
+            // Add some subtle noise for organic feel
+            const noise = 0.3;
+            const nx = x + (Math.random() - 0.5) * noise;
+            const ny = y + (Math.random() - 0.5) * noise;
+            const nz = z + (Math.random() - 0.5) * noise;
+            
+            return new THREE.Vector3(nx, ny, nz);
+        }
+            
+        // Create a custom geometry for the knot mesh
+        function createKnotMeshGeometry() {
+            if (dragonflies.length < 3) return null;
+            
+            const positions = [];
+            const indices = [];
+            
+            // Create vertices along the knot path
+            for (let i = 0; i < dragonflies.length; i++) {
+                const pos = dragonflies[i].position;
+                positions.push(pos.x, pos.y, pos.z);
+            }
+            
+            if (fullConnect) {
+                // Create fully connected mesh (all edges between all points)
+                for (let i = 0; i < dragonflies.length; i++) {
+                    for (let j = i + 1; j < dragonflies.length; j++) {
+                        indices.push(i, j);
+                    }
+                }
+            } else {
+                // Create a continuous line through all points
+                for (let i = 0; i < dragonflies.length - 1; i++) {
+                    indices.push(i, i + 1);
+                }
+                // Close the loop
+                indices.push(dragonflies.length - 1, 0);
+            }
+            
+            // Create triangles for the ribbon effect
+            const ribbonWidth = 0.5;
+            for (let i = 0; i < dragonflies.length; i++) {
+                let forward;
+                
+                if (fullConnect) {
+                    // For full connect, use average direction to all connected points
+                    forward = new THREE.Vector3();
+                    for (let j = 0; j < dragonflies.length; j++) {
+                        if (i !== j) {
+                            const dir = new THREE.Vector3().subVectors(
+                                dragonflies[j].position,
+                                dragonflies[i].position
+                            ).normalize();
+                            forward.add(dir);
+                        }
+                    }
+                    forward.normalize();
+                } else {
+                    // For normal mode, use direction to next point
+                    const next = (i + 1) % dragonflies.length;
+                    const prev = (i - 1 + dragonflies.length) % dragonflies.length;
+                    forward = new THREE.Vector3().subVectors(
+                        dragonflies[next].position,
+                        dragonflies[prev].position
+                    ).normalize();
+                }
+                
+                // Calculate perpendicular vector
+                const up = new THREE.Vector3(0, 1, 0);
+                const right = new THREE.Vector3().crossVectors(forward, up).normalize();
+                
+                // Create offset points for ribbon
+                const p1 = new THREE.Vector3().copy(dragonflies[i].position).add(right.clone().multiplyScalar(ribbonWidth));
+                const p2 = new THREE.Vector3().copy(dragonflies[i].position).add(right.clone().multiplyScalar(-ribbonWidth));
+                
+                positions.push(p1.x, p1.y, p1.z);
+                positions.push(p2.x, p2.y, p2.z);
+            }
+            
+            // Create ribbon triangles
+            if (!fullConnect) {
+                for (let i = 0; i < dragonflies.length; i++) {
+                    const next = (i + 1) % dragonflies.length;
+                    
+                    // Indices for the ribbon
+                    const base1 = i * 2 + dragonflies.length;
+                    const base2 = next * 2 + dragonflies.length;
+                    
+                    indices.push(base1, base2, base1 + 1);
+                    indices.push(base1 + 1, base2, base2 + 1);
+                }
+            }
+            
+            // Create the geometry
+            const geometry = new THREE.BufferGeometry();
+            geometry.setIndex(indices);
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            
+            // Compute normals for proper lighting
+            geometry.computeVertexNormals();
+            
+            return geometry;
+        }
+
+        // Update the connecting mesh between dragonflies
+        function updateMesh() {
+            if (!showMesh || dragonflies.length < 3) {
+                mesh.visible = false;
+                return;
+            }
+            
+            mesh.visible = true;
+            
+            // Create custom geometry
+            const newGeometry = createKnotMeshGeometry();
+            
+            if (!newGeometry) {
+                mesh.visible = false;
+                return;
+            }
+            
+            // Update the mesh geometry
+            if (mesh.geometry) mesh.geometry.dispose();
+            mesh.geometry = newGeometry;
+            
+            // Update material opacity
+            meshMaterial.uniforms.u_blend.value = meshOpacity;
+        }
+
+        // Add dragonflies to the scene
+        function addDragonflies(count) {
+            const startTime = performance.now();
+            let added = 0;
+            
+            // Add in batches to prevent UI freeze
+            function addBatch() {
+                const batchSize = Math.min(50, count - added);
+                
+                for (let i = 0; i < batchSize; i++) {
+                    const material = materials[Math.floor(Math.random() * materials.length)];
+                    const size = 0.8 + Math.random() * 0.4;
+                    const dragonfly = createDragonfly(material, size);
+                    
+                    // Position along the knot
+                    const index = dragonflies.length + added;
+                    const position = calculateKnotPosition(index, count, Math.random());
+                    dragonfly.position.copy(position);
+                    
+                    scene.add(dragonfly);
+                    dragonflies.push(dragonfly);
+                    added++;
+                }
+                
+                updateCountDisplay();
+                
+                if (added < count) {
+                    updateInfo(`Adding dragonflies: ${added}/${count}`);
+                    setTimeout(addBatch, 1);
+                } else {
+                    updateInfo(`Added ${count} dragonflies in ${(performance.now() - startTime).toFixed(0)}ms`);
+                }
+            }
+            
+            addBatch();
+        }
+
+        // Remove dragonflies from the scene
+        function removeDragonflies(count) {
+            count = Math.min(count, dragonflies.length);
+            
+            for (let i = 0; i < count; i++) {
+                if (dragonflies.length > 0) {
+                    const dragonfly = dragonflies.pop();
+                    scene.remove(dragonfly);
+                }
+            }
+            
+            updateCountDisplay();
+            updateInfo(`Removed ${count} dragonflies. ${dragonflies.length} remaining.`);
+        }
+
+        // Update wing animations and knot movements
+        function updateDragonflies(deltaTime) {
+            time += deltaTime;
+            
+            // Update positions along the knot
+            dragonflies.forEach((dragonfly, i) => {
+                if (!dragonfly.userData) return;
+                
+                // Wing flapping
+                const flapAngle = Math.sin((time + dragonfly.userData.timeOffset) * wingSpeed) * Math.PI / 4;
+                dragonfly.userData.wings.forEach((wing, j) => {
+                    // Alternate wing directions
+                    const direction = j % 2 === 0 ? 1 : -1;
+                    wing.rotation.x = flapAngle * direction;
+                });
+                
+                // Store last position for direction calculation
+                dragonfly.userData.lastPosition.copy(dragonfly.position);
+                
+                // Calculate new knot position
+                const targetPosition = calculateKnotPosition(i, dragonflies.length, dragonfly.userData.timeOffset);
+                
+                // Smooth movement toward knot position
+                dragonfly.position.lerp(targetPosition, 0.1);
+                
+                // Calculate direction for orientation
+                const direction = new THREE.Vector3().subVectors(
+                    dragonfly.position,
+                    dragonfly.userData.lastPosition
+                ).normalize();
+                
+                if (direction.length() > 0) {
+                    // Face direction of movement
+                    dragonfly.quaternion.setFromUnitVectors(
+                        new THREE.Vector3(1, 0, 0),
+                        direction
+                    );
+                    
+                    // Add slight upward tilt
+                    dragonfly.rotation.z += Math.PI / 8;
+                }
+            });
+            
+            // Update the connecting mesh
+            updateMesh();
+            
+            // Handle auto knot cycling
+            if (autoKnotCycle) {
+                cycleTimer += deltaTime;
+                if (cycleTimer >= nextCycleTime) {
+                    cycleToRandomKnot();
+                    cycleTimer = 0;
+                    nextCycleTime = cycleInterval * (0.8 + Math.random() * 0.4); // Randomize next cycle time
+                }
+            }
+        }
+
+        // Cycle to a random knot type
+        function cycleToRandomKnot() {
+            const currentIndex = knotTypes.indexOf(knotType);
+            let newIndex;
+            
+            // Get a different random knot type
+            do {
+                newIndex = Math.floor(Math.random() * knotTypes.length);
+            } while (newIndex === currentIndex && knotTypes.length > 1);
+            
+            knotType = knotTypes[newIndex];
+            document.getElementById('knotType').value = knotType;
+            updateInfo(`Auto-cycled to ${knotType} knot`);
+        }
+
+        // Toggle auto knot cycling
+        function toggleAutoKnotCycle() {
+            autoKnotCycle = !autoKnotCycle;
+            const button = document.getElementById('toggleAutoKnot');
+            button.textContent = autoKnotCycle ? 'Stop Auto Knot Cycle' : 'Start Auto Knot Cycle';
+            
+            if (autoKnotCycle) {
+                cycleTimer = 0;
+                nextCycleTime = cycleInterval * (0.8 + Math.random() * 0.4);
+                updateInfo('Started auto knot cycling');
+            } else {
+                updateInfo('Stopped auto knot cycling');
+            }
+        }
+
+        // Update info display
+        function updateInfo(message) {
+            if (message) {
+                document.getElementById('info').textContent = message;
+                return;
+            }
+            
+            document.getElementById('info').textContent = 
+                `Dragonflies: ${dragonflies.length} | ` +
+                `Knot Type: ${knotType} | ` +
+                `Wing Speed: ${wingSpeed.toFixed(1)} | ` +
+                `Knot Tightness: ${knotTightness.toFixed(1)} | ` +
+                `Knot Size: ${knotSize.toFixed(0)} | ` +
+                `Fractal: ${fractalIterations} iters @ ${fractalScale.toFixed(1)} | ` +
+                `Mesh: ${showMesh ? 'On' : 'Off'} | ` +
+                `Connections: ${fullConnect ? 'Full' : 'Loop'}` +
+                (autoKnotCycle ? ` | Auto Cycle: ON (${cycleInterval}s)` : '');
+        }
+
+        function updateCountDisplay() {
+            document.getElementById('count-display').textContent = dragonflies.length;
+            document.getElementById('dragonflyCount').value = dragonflies.length;
+        }
+
+        function resetCamera() {
+            camera.position.set(0, 0, 100);
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+
+        function toggleMesh() {
+            showMesh = !showMesh;
+            updateInfo();
+        }
+
+        function toggleFullConnect() {
+            fullConnect = !fullConnect;
+            updateInfo();
+        }
+
+        // Main initialization function
+        function init() {
+            // Create initial dragonflies
+            addDragonflies(50);
+            
+            // UI Event Listeners
+            document.getElementById('resetCamera').addEventListener('click', resetCamera);
+            document.getElementById('toggleMesh').addEventListener('click', toggleMesh);
+            document.getElementById('toggleFullConnect').addEventListener('click', toggleFullConnect);
+            document.getElementById('addDragonflies').addEventListener('click', () => addDragonflies(10));
+            document.getElementById('removeDragonflies').addEventListener('click', () => removeDragonflies(10));
+            document.getElementById('toggleAutoKnot').addEventListener('click', toggleAutoKnotCycle);
+            document.getElementById('dragonflyCount').addEventListener('input', (e) => {
+                const targetCount = parseInt(e.target.value);
+                const difference = targetCount - dragonflies.length;
+                
+                if (difference > 0) {
+                    addDragonflies(difference);
+                } else if (difference < 0) {
+                    removeDragonflies(-difference);
+                }
+            });
+            document.getElementById('wingSpeed').addEventListener('input', (e) => {
+                wingSpeed = parseFloat(e.target.value);
+                updateInfo();
+            });
+            document.getElementById('knotTightness').addEventListener('input', (e) => {
+                knotTightness = parseFloat(e.target.value);
+                updateInfo();
+            });
+            document.getElementById('knotSize').addEventListener('input', (e) => {
+                knotSize = parseFloat(e.target.value);
+                updateInfo();
+            });
+            document.getElementById('meshOpacity').addEventListener('input', (e) => {
+                meshOpacity = parseFloat(e.target.value);
+                meshMaterial.uniforms.u_blend.value = meshOpacity;
+                updateInfo();
+            });
+            document.getElementById('knotType').addEventListener('change', (e) => {
+                knotType = e.target.value;
+                updateInfo();
+            });
+            document.getElementById('fractalIterations').addEventListener('input', (e) => {
+                fractalIterations = parseInt(e.target.value);
+                updateInfo();
+            });
+            document.getElementById('fractalScale').addEventListener('input', (e) => {
+                fractalScale = parseFloat(e.target.value);
+                updateInfo();
+            });
+            document.getElementById('cycleInterval').addEventListener('input', (e) => {
+                cycleInterval = parseFloat(e.target.value);
+                updateInfo();
+            });
+            
+            // Voronoi shader controls
+            document.getElementById('cellSize').addEventListener('input', (e) => {
+                voronoiSettings.cellSize = parseFloat(e.target.value);
+                meshMaterial.uniforms.u_cellSize.value = voronoiSettings.cellSize;
+            });
+            document.getElementById('shaderSpeed').addEventListener('input', (e) => {
+                voronoiSettings.speed = parseFloat(e.target.value);
+                meshMaterial.uniforms.u_speed.value = voronoiSettings.speed;
+            });
+            document.getElementById('blend').addEventListener('input', (e) => {
+                voronoiSettings.blend = parseFloat(e.target.value);
+                meshMaterial.uniforms.u_blend.value = voronoiSettings.blend;
+            });
+            document.getElementById('glowIntensity').addEventListener('input', (e) => {
+                voronoiSettings.glowIntensity = parseFloat(e.target.value);
+                meshMaterial.uniforms.u_glowIntensity.value = voronoiSettings.glowIntensity;
+            });
+            document.getElementById('glowRadius').addEventListener('input', (e) => {
+                voronoiSettings.glowRadius = parseFloat(e.target.value);
+                meshMaterial.uniforms.u_glowRadius.value = voronoiSettings.glowRadius;
+            });
+            document.getElementById('edgeGlow').addEventListener('input', (e) => {
+                voronoiSettings.edgeGlow = parseFloat(e.target.value);
+                meshMaterial.uniforms.u_edgeGlow.value = voronoiSettings.edgeGlow;
+            });
+            document.getElementById('animateShader').addEventListener('change', (e) => {
+                voronoiSettings.animate = e.target.checked;
+            });
+            
+            // Hide loading message
+            document.getElementById('loading').style.display = 'none';
+            
+            // Animation loop
+            let lastTime = 0;
+            function animate(currentTime) {
+                const deltaTime = (currentTime - lastTime) / 1000;
+                lastTime = currentTime;
+                
+                requestAnimationFrame(animate);
+                controls.update();
+                
+                // Update shader time
+                if (voronoiSettings.animate) {
+                    meshMaterial.uniforms.u_time.value = currentTime / 1000;
+                }
+                
+                // Update dragonfly movements
+                updateDragonflies(deltaTime);
+                
+                updateInfo();
+                renderer.render(scene, camera);
+            }
+            
+            animate(0);
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Start the creation process
+        init();
+    </script>
+</body>
+</html>
