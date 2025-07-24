@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hypergraph Pruner in 3D with Three.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r100/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r100/examples/js/controls/FlyControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #pruned-container { width: 100%; height: 100vh; position: relative; }
+        #controls { position: absolute; top: 10px; left: 10px; z-index: 10; }
+        #fullscreen-btn { position: absolute; top: 10px; right: 10px; z-index: 10; }
+        #file-list { max-height: 200px; overflow-y: auto; margin-top: 10px; }
+        #file-list img { width: 50px; height: auto; margin-right: 10px; }
+        #file-list ul { list-style-type: none; padding: 0; }
+        #file-list li { display: flex; align-items: center; margin-bottom: 5px; }
+        #file-list select { margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <div id="pruned-container"></div> <!-- For pruned point cloud viz -->
+    <div id="controls">
+        <input type="file" id="imageInput" accept="image/*" multiple>
+        <button onclick="runPruner()">Run Pruner</button>
+        <label for="offset">Layer Offset:</label>
+        <input type="number" id="offset" value="6" min="0" max="50" step="0.1">
+        <label for="fillSpaces">Fill Spaces:</label>
+        <input type="checkbox" id="fillSpaces">
+        <label for="fillFaces">Fill Faces:</label>
+        <input type="checkbox" id="fillFaces">
+        <div id="file-list"></div>
+    </div>
+
+    <script>
+        let imageFiles = [];
+        let shaderSelections = [];
+
+        // Display selected files with previews
+        document.getElementById('imageInput').addEventListener('change', function() {
+            const newFiles = Array.from(this.files);
+            imageFiles = [...imageFiles, ...newFiles];
+            shaderSelections = new Array(imageFiles.length).fill('Sway');
+            displayFileList();
+            this.value = ''; // Clear input to allow adding more files
+        });
+
+        function displayFileList() {
+            const listDiv = document.getElementById('file-list');
+            listDiv.innerHTML = '';
+            if (imageFiles.length > 0) {
+                const ul = document.createElement('ul');
+                imageFiles.forEach((file, index) => {
+                    const li = document.createElement('li');
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    img.onload = () => URL.revokeObjectURL(img.src); // Clean up
+                    li.appendChild(img);
+                    li.appendChild(document.createTextNode(file.name));
+                    const select = document.createElement('select');
+                    select.innerHTML = '<option value="Sway">Sway</option><option value="Fire">Fire</option>';
+                    select.value = shaderSelections[index];
+                    select.addEventListener('change', (e) => {
+                        shaderSelections[index] = e.target.value;
+                    });
+                    li.appendChild(select);
+                    ul.appendChild(li);
+                });
+                listDiv.appendChild(ul);
+            }
+        }
+
+        // Generate point cloud from image and get dimensions
+        async function getPointCloudFromImage(imageFile, addExtraPoints) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const data = ctx.getImageData(0, 0, img.width, img.height).data;
+
+                    const points = [];
+                    const colors = [];
+                    // Original points
+                    for (let y = 0; y < img.height; y++) {
+                        for (let x = 0; x < img.width; x++) {
+                            const idx = (y * img.width + x) * 4;
+                            const r = data[idx] / 255;
+                            const g = data[idx+1] / 255;
+                            const b = data[idx+2] / 255;
+                            const intensity = (r + g + b) / 3;
+                            points.push([x - img.width / 2, intensity * 5, y - img.height / 2]);
+                            colors.push([r, g, b]);
+                        }
+                    }
+                    // Interpolated points between rows if addExtraPoints is true
+                    if (addExtraPoints) {
+                        for (let y = 0; y < img.height - 1; y++) {
+                            for (let x = 0; x < img.width; x++) {
+                                const idx1 = (y * img.width + x) * 4;
+                                const idx2 = ((y + 1) * img.width + x) * 4;
+                                const r = (data[idx1] / 255 + data[idx2] / 255) / 2;
+                                const g = (data[idx1 + 1] / 255 + data[idx2 + 1] / 255) / 2;
+                                const b = (data[idx1 + 2] / 255 + data[idx2 + 2] / 255) / 2;
+                                const intensity = (r + g + b) / 3;
+                                points.push([x - img.width / 2, intensity * 5, y + 0.5 - img.height / 2]);
+                                colors.push([r, g, b]);
+                            }
+                        }
+                    }
+                    resolve({points, colors, width: img.width, height: img.height});
+                };
+                img.src = URL.createObjectURL(imageFile);
+            });
+        }
+
+        // Render point cloud with Three.js using custom shader for display
+        function renderPrunedCloud(imageDatas, containerId, offset, shaderSelections, fillFaces) {
+            const scene = new THREE.Scene();
+            scene.add(new THREE.AmbientLight(0xffffff)); // Add light to avoid dark screen
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            const prunedContainer = document.getElementById(containerId);
+            prunedContainer.innerHTML = ''; // Clear previous renderer if any
+            prunedContainer.appendChild(renderer.domElement);
+
+            // Add fullscreen button dynamically
+            const fullscreenBtn = document.createElement('button');
+            fullscreenBtn.id = 'fullscreen-btn';
+            fullscreenBtn.textContent = 'Full Screen';
+            fullscreenBtn.style.position = 'absolute';
+            fullscreenBtn.style.top = '10px';
+            fullscreenBtn.style.right = '10px';
+            fullscreenBtn.style.zIndex = '10';
+            prunedContainer.appendChild(fullscreenBtn);
+
+            fullscreenBtn.onclick = () => {
+                if (!document.fullscreenElement) {
+                    prunedContainer.requestFullscreen().catch(err => console.log(err));
+                } else {
+                    document.exitFullscreen();
+                }
+            };
+
+            const maxWidth = Math.max(...imageDatas.map(d => d.width));
+            const maxDepth = Math.max(...imageDatas.map(d => d.height));
+
+            const cloudGroup = new THREE.Group(); // Group to hold multiple clouds
+            scene.add(cloudGroup);
+
+            const materials = [];
+
+            let currentY = 0;
+
+            for (let i = 0; i < imageDatas.length; i++) {
+                const data = imageDatas[i];
+                const shaderType = shaderSelections[i];
+                let vertexShader, fragmentShader;
+
+                const pointSizeLine = fillFaces ? '' : 'gl_PointSize = 2.0;';
+
+                if (shaderType === 'Sway') {
+                    vertexShader = `
+                        uniform float time;
+                        varying vec3 vColor;
+                        void main() {
+                            vColor = color;
+                            vec3 pos = position;
+                            pos.y += sin(time + position.x * 0.1) * 0.5; // Sway up-down based on x and time
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                            ${pointSizeLine}
+                        }
+                    `;
+                    fragmentShader = `
+                        varying vec3 vColor;
+                        void main() {
+                            gl_FragColor = vec4(vColor, 1.0);
+                        }
+                    `;
+                } else if (shaderType === 'Fire') {
+                    vertexShader = `
+                        uniform float time;
+                        varying vec3 vColor;
+                        varying float vY;
+                        void main() {
+                            vColor = color;
+                            vY = position.y;
+                            vec3 pos = position;
+                            pos.y += sin(time * 2.0 + position.x * 0.3 + position.z * 0.2) * 1.0;
+                            pos.x += cos(time * 1.5 + position.y * 0.1) * 0.5;
+                            pos.z += sin(time * 1.8 + position.y * 0.15) * 0.5;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                            ${pointSizeLine}
+                        }
+                    `;
+                    fragmentShader = `
+                        uniform float time;
+                        varying vec3 vColor;
+                        varying float vY;
+                        void main() {
+                            float flicker = sin(time * 5.0 + vY * 0.2) * 0.2 + 0.8;
+                            vec3 fireColor = mix(vec3(1.0, 0.2, 0.0), vec3(1.0, 0.8, 0.0), (vY + 5.0) / 10.0);
+                            gl_FragColor = vec4(vColor * fireColor * flicker, 1.0);
+                        }
+                    `;
+                }
+
+                const material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0.0 }
+                    },
+                    vertexShader: vertexShader,
+                    fragmentShader: fragmentShader,
+                    vertexColors: true,
+                    side: THREE.DoubleSide
+                });
+                materials.push(material);
+
+                const xOff = (maxWidth - data.width) / 2;
+                const zOff = (maxDepth - data.height) / 2;
+                const verts = [];
+                const cols = [];
+                const shouldPerturb = (i > 0 && offset < 6 && !fillFaces);
+                data.points.forEach((pos, j) => {
+                    const px = shouldPerturb ? Math.random() * 3 - 1.5 : 0;
+                    const py = shouldPerturb ? Math.random() * 3 - 1.5 : 0;
+                    const pz = shouldPerturb ? Math.random() * 3 - 1.5 : 0;
+                    verts.push(pos[0] + xOff + px, pos[1] + currentY + py, pos[2] + zOff + pz);
+                    cols.push(...data.colors[j]);
+                });
+                const geometry = new THREE.BufferGeometry();
+                geometry.addAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+                geometry.addAttribute('color', new THREE.BufferAttribute(new Float32Array(cols), 3));
+                
+                if (fillFaces) {
+                    const indices = [];
+                    for (let y = 0; y < data.height - 1; y++) {
+                        for (let x = 0; x < data.width - 1; x++) {
+                            const a = y * data.width + x;
+                            const b = y * data.width + x + 1;
+                            const c = (y + 1) * data.width + x + 1;
+                            const d = (y + 1) * data.width + x;
+                            indices.push(a, b, c);
+                            indices.push(a, c, d);
+                        }
+                    }
+                    geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
+                    const mesh = new THREE.Mesh(geometry, material);
+                    cloudGroup.add(mesh);
+                } else {
+                    const points = new THREE.Points(geometry, material);
+                    cloudGroup.add(points);
+                }
+                
+                currentY += offset;
+            }
+
+            const totalHeight = currentY - offset + 5; // Approximate total height including last layer
+
+            // Add FlyControls
+            const clock = new THREE.Clock();
+            const controls = new THREE.FlyControls(camera, renderer.domElement);
+            controls.movementSpeed = 50;
+            controls.rollSpeed = Math.PI / 24;
+            controls.autoForward = false;
+            controls.dragToLook = true;
+
+            camera.position.set(maxWidth / 2 + 50, totalHeight / 2, 0);
+            camera.lookAt(0, totalHeight / 2, 0);
+
+            let time = 0;
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const delta = clock.getDelta();
+                controls.update(delta);
+                time += 0.01;
+                materials.forEach(mat => {
+                    mat.uniforms.time.value = time;
+                });
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // Main function
+        async function runPruner() {
+            if (!imageFiles.length) return alert('Upload at least one image');
+
+            const fillSpaces = document.getElementById('fillSpaces').checked;
+            const fillFaces = document.getElementById('fillFaces').checked;
+            const addExtraPoints = fillSpaces && !fillFaces;
+            const imageDatas = await Promise.all(imageFiles.map(file => getPointCloudFromImage(file, addExtraPoints)));
+            const numImages = imageDatas.length;
+            console.log(`Processing ${numImages} images`);
+
+            const offset = parseFloat(document.getElementById('offset').value) || 6;
+
+            // Pass array of image data to render
+            renderPrunedCloud(imageDatas, 'pruned-container', offset, shaderSelections, fillFaces);
+        }
+    </script>
+</body>
+</html>
+

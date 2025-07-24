@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hypergraph Pruner in 3D with Three.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r100/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r100/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #pruned-container { width: 100%; height: 100vh; position: relative; }
+        #controls { position: absolute; top: 10px; left: 10px; z-index: 10; }
+        #fullscreen-btn { position: absolute; top: 10px; right: 10px; z-index: 10; }
+    </style>
+</head>
+<body>
+    <div id="pruned-container"></div> <!-- For pruned point cloud viz -->
+    <div id="controls">
+        <input type="file" id="imageInput" accept="image/*">
+        <label for="densitySlider">Density: </label>
+        <input type="range" id="densitySlider" min="1" max="5" value="2" step="1">
+        <span id="densityValue">2</span>
+        <button onclick="runPruner()">Run Pruner</button>
+    </div>
+
+    <script>
+        // Update density value display
+        document.getElementById('densitySlider').addEventListener('input', (e) => {
+            document.getElementById('densityValue').textContent = e.target.value;
+        });
+
+        // Generate point cloud from image and get dimensions, mapped to conical tunnel
+        async function getPointCloudFromImage(imageFile, density) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const data = ctx.getImageData(0, 0, img.width, img.height).data;
+
+                    const points = [];
+                    const colors = [];
+                    const baseRadius = 50; // Base radius of tunnel
+                    const length = img.height; // Axial length
+                    const offsetStep = 1.0 / density;
+                    for (let y = 0; y < img.height; y++) {
+                        for (let x = 0; x < img.width; x++) {
+                            const idx = (y * img.width + x) * 4;
+                            const r = data[idx] / 255;
+                            const g = data[idx+1] / 255;
+                            const b = data[idx+2] / 255;
+                            const intensity = (r + g + b) / 3;
+                            for (let dy = 0; dy < density; dy++) {
+                                for (let dx = 0; dx < density; dx++) {
+                                    const angle = ((x + dx * offsetStep) / img.width) * Math.PI * 2;
+                                    const axial = (y + dy * offsetStep) - img.height / 2;
+                                    const taper = 1 - ((y + dy * offsetStep) / length); // Taper from 1 to 0
+                                    const rad = (baseRadius + intensity * 5) * taper; // Taper radius to 0 at end
+                                    const px = rad * Math.cos(angle);
+                                    const py = rad * Math.sin(angle);
+                                    const pz = axial;
+                                    points.push([px, py, pz]);
+                                    colors.push([r, g, b]);
+                                }
+                            }
+                        }
+                    }
+                    resolve({points, colors, width: img.width, height: img.height});
+                };
+                img.src = URL.createObjectURL(imageFile);
+            });
+        }
+
+        // Render point cloud with Three.js using custom shader for display
+        function renderPrunedCloud(points, colors, containerId) {
+            const scene = new THREE.Scene();
+            scene.add(new THREE.AmbientLight(0xffffff)); // Add light to avoid dark screen
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            const prunedContainer = document.getElementById(containerId);
+            prunedContainer.innerHTML = ''; // Clear previous renderer if any
+            prunedContainer.appendChild(renderer.domElement);
+
+            // Add fullscreen button dynamically
+            const fullscreenBtn = document.createElement('button');
+            fullscreenBtn.id = 'fullscreen-btn';
+            fullscreenBtn.textContent = 'Full Screen';
+            fullscreenBtn.style.position = 'absolute';
+            fullscreenBtn.style.top = '10px';
+            fullscreenBtn.style.right = '10px';
+            fullscreenBtn.style.zIndex = '10';
+            prunedContainer.appendChild(fullscreenBtn);
+
+            fullscreenBtn.onclick = () => {
+                if (!document.fullscreenElement) {
+                    prunedContainer.requestFullscreen().catch(err => console.log(err));
+                } else {
+                    document.exitFullscreen();
+                }
+            };
+
+            const geometry = new THREE.BufferGeometry();
+            const verts = [];
+            const cols = [];
+            points.forEach((pos, i) => {
+                verts.push(...pos);
+                cols.push(...colors[i]);
+            });
+            geometry.addAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+            geometry.addAttribute('color', new THREE.BufferAttribute(new Float32Array(cols), 3));
+
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0.0 }
+                },
+                vertexShader: `
+                    uniform float time;
+                    varying vec3 vColor;
+
+                    void main() {
+                        vColor = color;
+                        vec3 pos = position;
+                        pos.y += sin(time + position.x * 0.1) * 0.5; // Sway up-down based on x and time
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                        gl_PointSize = 2.0; // Increased point size for visibility
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vColor;
+                    void main() {
+                        gl_FragColor = vec4(vColor, 1.0);
+                    }
+                `,
+                vertexColors: true
+            });
+
+            const cloudGroup = new THREE.Group(); // Group to hold multiple clouds
+            const initialCloud = new THREE.Points(geometry, material);
+            cloudGroup.add(initialCloud);
+            scene.add(cloudGroup);
+
+            // Add OrbitControls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableZoom = true;
+            controls.enableRotate = true;
+
+            camera.position.y = 0; // Inside the tunnel
+            camera.position.z = 0;
+            camera.lookAt(0, 0, -1); // Look negative z
+
+            let time = 0;
+            let speed = 0;
+            let isAccelerating = false;
+            let lastZ = 0; // Track last cloud position
+
+            // Mouse events for acceleration
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                if (e.button === 0) isAccelerating = true;
+            });
+            renderer.domElement.addEventListener('mouseup', (e) => {
+                if (e.button === 0) isAccelerating = false;
+            });
+
+            function animate() {
+                requestAnimationFrame(animate);
+                time += 0.01;
+                material.uniforms.time.value = time;
+
+                if (isAccelerating) {
+                    speed = Math.min(speed + 0.1, 5); // Accelerate
+                } else {
+                    speed = Math.max(speed - 0.05, 0.5); // Decelerate to base speed
+                }
+
+                camera.position.z -= speed; // Move negative z
+
+                // Add new cloud if camera has advanced enough
+                if (camera.position.z < lastZ - 100) { // Threshold for new cloud
+                    const newCloud = new THREE.Points(geometry, material);
+                    newCloud.position.z = camera.position.z - 100; // Place ahead
+                    cloudGroup.add(newCloud);
+                    lastZ = newCloud.position.z;
+                }
+
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // Main function
+        async function runPruner() {
+            const imageFile = document.getElementById('imageInput').files[0];
+            if (!imageFile) return alert('Upload an image');
+
+            const density = parseInt(document.getElementById('densitySlider').value, 10);
+
+            const imageData = await getPointCloudFromImage(imageFile, density);
+            const numPixels = imageData.width * imageData.height;
+            console.log(`Processing ${numPixels} pixels with density ${density}`);
+
+            // Directly use points and colors from image
+            renderPrunedCloud(imageData.points, imageData.colors, 'pruned-container');
+        }
+    </script>
+</body>
+</html>
+

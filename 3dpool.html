@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Zero-Gravity Space Pool</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: white;
+        }
+        canvas { 
+            display: block; 
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            z-index: 100;
+        }
+        #power-meter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 20px;
+            background-color: rgba(255,255,255,0.3);
+            border-radius: 10px;
+            overflow: hidden;
+            pointer-events: auto;
+            z-index: 100;
+            cursor: pointer;
+        }
+        #power-level {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(to right, #00ff00, #ffff00, #ff0000);
+            transition: width 0.05s;
+        }
+        #lock-camera-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 16px;
+            background-color: rgba(0, 150, 255, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 100;
+        }
+        #lock-camera-btn:hover {
+            background-color: rgba(0, 150, 255, 1);
+        }
+        #shoot-btn {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            padding: 8px 16px;
+            background-color: rgba(255, 50, 50, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 100;
+        }
+        #shoot-btn:hover {
+            background-color: rgba(255, 50, 50, 1);
+        }
+        #shoot-btn:disabled {
+            background-color: rgba(100, 100, 100, 0.8);
+            cursor: not-allowed;
+        }
+        #reset-power-btn {
+            position: absolute;
+            top: 90px;
+            right: 10px;
+            padding: 8px 16px;
+            background-color: rgba(50, 255, 50, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 100;
+        }
+        #reset-power-btn:hover {
+            background-color: rgba(50, 255, 50, 1);
+        }
+        #stars {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        #tutorial-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 200;
+        }
+        #tutorial-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 10px;
+            color: white;
+        }
+        #tutorial-modal button {
+            padding: 8px 16px;
+            background-color: rgba(50, 255, 50, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #tutorial-modal button:hover {
+            background-color: rgba(50, 255, 50, 1);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        Player Turn: <span id="player-turn">Player 1</span><br>
+        Player 1 Balls: <span id="player1-balls">Solids (1-7)</span><br>
+        Player 2 Balls: <span id="player2-balls">Stripes (9-15)</span>
+    </div>
+    <button id="lock-camera-btn">Lock Camera to Ball</button>
+    <button id="shoot-btn" disabled>Shoot</button>
+    <button id="reset-power-btn">Reset Power</button>
+    <div id="power-meter">
+        <div id="power-level"></div>
+    </div>
+    <div id="tutorial-modal">
+        <div id="tutorial-content">
+            <h2>Tutorial: How to Shoot</h2>
+            <ol>
+                <li>Set power by clicking on the power meter at the bottom.</li>
+                <li>Hover the mouse over the white cue ball to see the aim preview.</li>
+                <li>Left click on the white cue ball to set the explosion point.</li>
+                <li>Drag the mouse to the Shoot button and click it.</li>
+            </ol>
+            <button id="close-tutorial">Close</button>
+        </div>
+    </div>
+    <div id="stars"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <script>
+        // Global variables
+        let scene, camera, renderer, physicsWorld, controls;
+        let table, cueBall, balls = [];
+        let power = 0, maxPower = 100, MIN_POWER = 10;
+        let player1Turn = true;
+        let player1Balls = [], player2Balls = [];
+        let player1Type = null, player2Type = null;
+        let foul = false;
+        let cameraLocked = false;
+        let cameraMode = 'orbit';
+        let elevationAngle = 0;
+        let lockedCameraDistance = 10;
+        const MAX_ELEVATION = Math.PI / 4;
+        const BALL_RADIUS = 0.6;
+        const TABLE_WIDTH = 20;
+        const TABLE_HEIGHT = 10;
+        const TABLE_LENGTH = 40;
+        const WALL_THICKNESS = 5;
+        const MIN_LOCKED_DISTANCE = 5;
+        const MAX_LOCKED_DISTANCE = 20;
+        let mouse = new THREE.Vector2();
+        let raycaster = new THREE.Raycaster();
+        let isLeftMouseDown = false;
+        let isMiddleMouseDown = false;
+        let isRightMouseDown = false;
+        let lastMousePosition = { x: 0, y: 0 };
+        let lastMiddleMouseY = 0;
+        let aimDot, trajectoryDots = [];
+        let stars = [];
+        let isHoveringCueBall = false;
+        let previewRelPos = new THREE.Vector3();
+
+        function init() {
+            console.log('Game initialized');
+            createStars();
+            setupScene();
+            setupPhysics();
+            createTable();
+            createBalls();
+            createAimingVisuals();
+            setupEventListeners();
+            updatePowerMeter();
+            updateUI();
+            document.getElementById('tutorial-modal').style.display = 'block';
+            animate();
+        }
+
+        function createStars() {
+            const starsContainer = document.getElementById('stars');
+            starsContainer.innerHTML = '';
+            for (let i = 0; i < 200; i++) {
+                const star = document.createElement('div');
+                star.style.position = 'absolute';
+                star.style.width = `${Math.random() * 3}px`;
+                star.style.height = star.style.width;
+                star.style.backgroundColor = 'white';
+                star.style.borderRadius = '50%';
+                star.style.left = `${Math.random() * 100}%`;
+                star.style.top = `${Math.random() * 100}%`;
+                star.style.opacity = Math.random();
+                starsContainer.appendChild(star);
+                stars.push(star);
+            }
+        }
+
+        function setupScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            scene.add(new THREE.AmbientLight(0x222222));
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 1, 1);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            const tableLight = new THREE.PointLight(0x4488ff, 2, 30);
+            tableLight.position.set(0, 0, 0);
+            scene.add(tableLight);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 25, -30);
+            camera.lookAt(0, 0, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.maxPolarAngle = Math.PI;
+            controls.minDistance = 10;
+            controls.maxDistance = 50;
+            controls.enablePan = false;
+        }
+
+        function setupPhysics() {
+            physicsWorld = new CANNON.World();
+            physicsWorld.gravity.set(0, 0, 0);
+            physicsWorld.broadphase = new CANNON.NaiveBroadphase();
+            physicsWorld.solver.iterations = 50;
+        }
+
+        function createTable() {
+            const cornerPocketRadius = 1.5;
+            const tableGeometry = new THREE.BoxGeometry(TABLE_WIDTH, TABLE_HEIGHT, TABLE_LENGTH);
+            const tableMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x00aaff,
+                transparent: true,
+                opacity: 0.2,
+                side: THREE.DoubleSide
+            });
+            table = new THREE.Mesh(tableGeometry, tableMaterial);
+            scene.add(table);
+            const edgesGeometry = new THREE.EdgesGeometry(tableGeometry);
+            const edgesMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
+            const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+            table.add(edges);
+            const pocketVertexShader = `
+                varying vec3 vNormal;
+                varying vec3 vViewPosition;
+                void main() {
+                    vNormal = normal;
+                    vViewPosition = -(modelViewMatrix * vec4(position, 1.0)).xyz;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `;
+            const pocketFragmentShader = `
+                varying vec3 vNormal;
+                varying vec3 vViewPosition;
+                void main() {
+                    vec3 normal = normalize(vNormal);
+                    vec3 viewDir = normalize(vViewPosition);
+                    float rim = 1.0 - max(dot(viewDir, normal), 0.0);
+                    rim = smoothstep(0.0, 1.0, rim);
+                    vec3 rimColor = vec3(1.0, 0.5, 0.0);
+                    gl_FragColor = vec4(mix(vec3(0.0), rimColor, rim), 1.0 - rim * 0.5);
+                }
+            `;
+            const pocketMaterial = new THREE.ShaderMaterial({
+                vertexShader: pocketVertexShader,
+                fragmentShader: pocketFragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            const pocketGeometry = new THREE.SphereGeometry(cornerPocketRadius, 16, 16);
+            const positions = [
+                { x: TABLE_WIDTH/2, y: 0, z: TABLE_LENGTH/2 },
+                { x: -TABLE_WIDTH/2, y: 0, z: TABLE_LENGTH/2 },
+                { x: TABLE_WIDTH/2, y: 0, z: -TABLE_LENGTH/2 },
+                { x: -TABLE_WIDTH/2, y: 0, z: -TABLE_LENGTH/2 }
+            ];
+            positions.forEach(pos => {
+                const pocket = new THREE.Mesh(pocketGeometry, pocketMaterial);
+                pocket.position.set(pos.x, pos.y, pos.z);
+                scene.add(pocket);
+                const pocketBody = new CANNON.Body({
+                    shape: new CANNON.Sphere(cornerPocketRadius),
+                    position: new CANNON.Vec3(pos.x, pos.y, pos.z),
+                    type: CANNON.Body.STATIC,
+                    isTrigger: true
+                });
+                physicsWorld.addBody(pocketBody);
+            });
+            const wallMaterial = new CANNON.Material("wallMaterial");
+            const ballMaterial = new CANNON.Material("ballMaterial");
+            const wallBallContactMaterial = new CANNON.ContactMaterial(
+                wallMaterial,
+                ballMaterial,
+                { restitution: 0.9, friction: 0.01 }
+            );
+            physicsWorld.addContactMaterial(wallBallContactMaterial);
+            const wallShapeX = new CANNON.Box(new CANNON.Vec3(TABLE_WIDTH/2, TABLE_HEIGHT/2, WALL_THICKNESS));
+            const wallShapeY = new CANNON.Box(new CANNON.Vec3(WALL_THICKNESS, TABLE_HEIGHT/2, TABLE_LENGTH/2));
+            const wallShapeZ = new CANNON.Box(new CANNON.Vec3(TABLE_WIDTH/2, WALL_THICKNESS, TABLE_LENGTH/2));
+            physicsWorld.addBody(new CANNON.Body({ type: CANNON.Body.STATIC, material: wallMaterial, shape: wallShapeX, position: new CANNON.Vec3(0, 0, TABLE_LENGTH/2 + WALL_THICKNESS) }));
+            physicsWorld.addBody(new CANNON.Body({ type: CANNON.Body.STATIC, material: wallMaterial, shape: wallShapeX, position: new CANNON.Vec3(0, 0, -TABLE_LENGTH/2 - WALL_THICKNESS) }));
+            physicsWorld.addBody(new CANNON.Body({ type: CANNON.Body.STATIC, material: wallMaterial, shape: wallShapeY, position: new CANNON.Vec3(TABLE_WIDTH/2 + WALL_THICKNESS, 0, 0) }));
+            physicsWorld.addBody(new CANNON.Body({ type: CANNON.Body.STATIC, material: wallMaterial, shape: wallShapeY, position: new CANNON.Vec3(-TABLE_WIDTH/2 - WALL_THICKNESS, 0, 0) }));
+            physicsWorld.addBody(new CANNON.Body({ type: CANNON.Body.STATIC, material: wallMaterial, shape: wallShapeZ, position: new CANNON.Vec3(0, TABLE_HEIGHT/2 + WALL_THICKNESS, 0) }));
+            physicsWorld.addBody(new CANNON.Body({ type: CANNON.Body.STATIC, material: wallMaterial, shape: wallShapeZ, position: new CANNON.Vec3(0, -TABLE_HEIGHT/2 - WALL_THICKNESS, 0) }));
+        }
+
+        function createBalls() {
+            const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 32, 32);
+            const ballMaterial = new CANNON.Material("ballMaterial");
+            const cueBallMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.5 });
+            cueBall = new THREE.Mesh(ballGeometry, cueBallMaterial);
+            cueBall.position.set(0, 0, -15);
+            cueBall.userData = { angle: Math.PI, relPos: new THREE.Vector3(0, 0, -BALL_RADIUS) };
+            scene.add(cueBall);
+            const cueBallBody = new CANNON.Body({
+                mass: 0.2,
+                shape: new CANNON.Sphere(BALL_RADIUS),
+                position: new CANNON.Vec3(0, 0, -15),
+                linearDamping: 0.15,
+                angularDamping: 0.15,
+                material: ballMaterial
+            });
+            cueBallBody.ccdSpeedThreshold = 0.5;
+            cueBallBody.ccdIterations = 10;
+            cueBall.userData.physicsBody = cueBallBody;
+            physicsWorld.addBody(cueBallBody);
+            const colors = [0xffff00, 0x0000ff, 0xff0000, 0x800080, 0xff8c00, 0x008000, 0x8b0000];
+            let ballCount = 0;
+            for (let layer = 0; layer < 3; layer++) {
+                for (let row = 0; row <= layer; row++) {
+                    for (let col = 0; col <= row; col++) {
+                        const x = (col - row/2) * BALL_RADIUS * 2.1;
+                        const y = layer * BALL_RADIUS * 1.8;
+                        const z = 10 + (row - layer/2) * BALL_RADIUS * 2.1;
+                        const ballNumber = ballCount + 1;
+                        const isSolid = ballNumber <= 7 || ballNumber === 8;
+                        const color = ballNumber === 8 ? 0x000000 : colors[(ballNumber - 1) % 7];
+                        const material = isSolid || ballNumber === 8 
+                            ? createGlowMaterial(color, ballNumber === 8 ? 0x333333 : null)
+                            : createStripedGlowMaterial(color);
+                        const ball = new THREE.Mesh(ballGeometry, material);
+                        ball.position.set(x, y, z);
+                        ball.userData = { 
+                            number: ballNumber, 
+                            type: ballNumber === 8 ? '8ball' : ballNumber < 8 ? 'solid' : 'stripe' 
+                        };
+                        scene.add(ball);
+                        const ballBody = new CANNON.Body({
+                            mass: 0.2,
+                            shape: new CANNON.Sphere(BALL_RADIUS),
+                            position: new CANNON.Vec3(x, y, z),
+                            linearDamping: 0.15,
+                            angularDamping: 0.15,
+                            material: ballMaterial
+                        });
+                        ballBody.ccdSpeedThreshold = 0.5;
+                        ballBody.ccdIterations = 10;
+                        ball.userData.physicsBody = ballBody;
+                        physicsWorld.addBody(ballBody);
+                        balls.push(ball);
+                        ballCount++;
+                        if (ballCount >= 15) return;
+                    }
+                }
+            }
+            player1Balls = balls.filter(ball => ball.userData.type === 'solid');
+            player2Balls = balls.filter(ball => ball.userData.type === 'stripe');
+        }
+
+        function createGlowMaterial(color, emissiveColor = null) {
+            return new THREE.MeshPhongMaterial({ 
+                color: color,
+                emissive: emissiveColor || color,
+                emissiveIntensity: 0.3,
+                shininess: 100
+            });
+        }
+
+        function createStripedGlowMaterial(color) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 512, 512);
+            ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+            ctx.fillRect(0, 200, 512, 112);
+            const texture = new THREE.CanvasTexture(canvas);
+            return new THREE.MeshPhongMaterial({ 
+                map: texture,
+                emissive: color,
+                emissiveIntensity: 0.2
+            });
+        }
+
+        function createAimingVisuals() {
+            const aimDotGeo = new THREE.SphereGeometry(0.1, 8, 8);
+            const aimDotMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            aimDot = new THREE.Mesh(aimDotGeo, aimDotMat);
+            aimDot.visible = false;
+            scene.add(aimDot);
+            for (let i = 0; i < 10; i++) {
+                const dotGeo = new THREE.SphereGeometry(0.05, 8, 8);
+                const dotMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const dot = new THREE.Mesh(dotGeo, dotMat);
+                dot.visible = false;
+                scene.add(dot);
+                trajectoryDots.push(dot);
+            }
+        }
+
+        function updateAimingVisuals() {
+            if (isBallsMoving() || !cueBall) {
+                aimDot.visible = false;
+                trajectoryDots.forEach(dot => dot.visible = false);
+                return;
+            }
+            let usePreview = isHoveringCueBall && !cameraLocked;
+            let currentAngle = usePreview ? Math.atan2(previewRelPos.x, previewRelPos.z) : cueBall.userData.angle || 0;
+            let currentElevation = usePreview ? Math.asin(previewRelPos.y / BALL_RADIUS) : elevationAngle;
+            let direction = new THREE.Vector3(
+                -Math.sin(currentAngle) * Math.cos(currentElevation),
+                Math.sin(currentElevation),
+                -Math.cos(currentAngle) * Math.cos(currentElevation)
+            ).normalize();
+            let currentRelPos = usePreview ? previewRelPos : cueBall.userData.relPos;
+            aimDot.position.copy(cueBall.position).add(currentRelPos);
+            aimDot.visible = true;
+            for (let i = 0; i < trajectoryDots.length; i++) {
+                const dot = trajectoryDots[i];
+                const t = (i + 1) * 0.5;
+                dot.position.copy(cueBall.position).add(direction.clone().multiplyScalar(t));
+                dot.visible = true;
+            }
+        }
+
+        function setupEventListeners() {
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('keydown', onKeyDown);
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('mousedown', onMouseDown, { capture: true });
+            renderer.domElement.addEventListener('mouseup', onMouseUp);
+            renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+            renderer.domElement.addEventListener('wheel', onMouseWheel, { passive: false });
+            document.getElementById('shoot-btn').addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                shootCueBall();
+            });
+            document.getElementById('power-meter').addEventListener('click', onPowerMeterClick);
+            document.getElementById('lock-camera-btn').addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleCameraLock();
+            });
+            document.getElementById('reset-power-btn').addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                power = 0;
+                updatePowerMeter();
+            });
+            document.getElementById('close-tutorial').addEventListener('click', () => {
+                document.getElementById('tutorial-modal').style.display = 'none';
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            const deltaX = event.clientX - lastMousePosition.x;
+            const deltaY = event.clientX - lastMousePosition.y;
+            lastMousePosition.x = event.clientX;
+            lastMousePosition.y = event.clientY;
+
+            if (isBallsMoving()) return;
+
+            if (!cameraLocked) {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObject(cueBall);
+                if (intersects.length > 0) {
+                    if (!isHoveringCueBall) {
+                        isHoveringCueBall = true;
+                        renderer.domElement.style.cursor = 'pointer';
+                        controls.enableRotate = false;
+                    }
+                    const hitPoint = intersects[0].point;
+                    previewRelPos.copy(hitPoint.sub(cueBall.position));
+                } else {
+                    if (isHoveringCueBall && !isLeftMouseDown) {
+                        isHoveringCueBall = false;
+                        renderer.domElement.style.cursor = 'default';
+                        controls.enableRotate = true;
+                    }
+                }
+            }
+
+            if (isLeftMouseDown) {
+                if (cameraLocked) {
+                    raycaster.setFromCamera(mouse, camera);
+                    const intersects = raycaster.intersectObject(cueBall);
+                    if (intersects.length > 0) {
+                        const hitPoint = intersects[0].point;
+                        cueBall.userData.relPos.copy(hitPoint.sub(cueBall.position));
+                        const normal = cueBall.userData.relPos.clone().normalize();
+                        elevationAngle = Math.asin(normal.y);
+                        cueBall.userData.angle = Math.atan2(normal.x, normal.z);
+                        updateCameraPosition();
+                    }
+                } else {
+                    cueBall.userData.angle -= deltaX * 0.01;
+                    power = THREE.MathUtils.clamp(power + deltaY * -0.5, 0, maxPower);
+                    updatePowerMeter();
+                }
+            }
+
+            if (isMiddleMouseDown) {
+                const elevationChange = (event.clientY - lastMiddleMouseY) * 0.005;
+                elevationAngle = THREE.MathUtils.clamp(elevationAngle + elevationChange, -MAX_ELEVATION, MAX_ELEVATION);
+                lastMiddleMouseY = event.clientY;
+            }
+
+            if (isLeftMouseDown || isMiddleMouseDown) {
+                updateCameraPosition();
+            }
+
+            updateAimingVisuals();
+        }
+
+        function onMouseDown(event) {
+            if (isBallsMoving()) return;
+
+            if (event.button === 0) {
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObject(cueBall);
+                if (intersects.length > 0) {
+                    const hitPoint = intersects[0].point;
+                    cueBall.userData.relPos.copy(hitPoint.sub(cueBall.position));
+                    const normal = cueBall.userData.relPos.clone().normalize();
+                    elevationAngle = Math.asin(normal.y);
+                    cueBall.userData.angle = Math.atan2(normal.x, normal.z);
+                    if (cameraLocked) {
+                        updateCameraPosition();
+                    }
+                    updateAimingVisuals();
+                    event.preventDefault();
+                    event.stopPropagation();
+                } else if (isHoveringCueBall && !cameraLocked) {
+                    isHoveringCueBall = false;
+                    renderer.domElement.style.cursor = 'default';
+                    controls.enableRotate = true;
+                    updateAimingVisuals();
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                isLeftMouseDown = true;
+                lastMousePosition.x = event.clientX;
+                lastMousePosition.y = event.clientY;
+            } else if (event.button === 1) {
+                isMiddleMouseDown = true;
+                lastMiddleMouseY = event.clientY;
+            } else if (event.button === 2) {
+                isRightMouseDown = true;
+                controls.enabled = !cameraLocked;
+            }
+        }
+
+        function onMouseUp(event) {
+            if (event.button === 0) {
+                isLeftMouseDown = false;
+            } else if (event.button === 1) {
+                isMiddleMouseDown = false;
+            } else if (event.button === 2) {
+                isRightMouseDown = false;
+                if (!cameraLocked) {
+                    controls.enabled = cameraMode === 'orbit';
+                }
+            }
+        }
+
+        function onMouseWheel(event) {
+            event.preventDefault();
+            if (cameraLocked) {
+                lockedCameraDistance += event.deltaY * 0.05;
+                lockedCameraDistance = THREE.MathUtils.clamp(lockedCameraDistance, MIN_LOCKED_DISTANCE, MAX_LOCKED_DISTANCE);
+                updateCameraPosition();
+            } else if (cameraMode === 'orbit') {
+                controls.update();
+            }
+        }
+
+        function onKeyDown(event) {
+            switch (event.key.toLowerCase()) {
+                case ' ':
+                    cameraMode = cameraMode === 'orbit' ? 'free' : 'orbit';
+                    if (!cameraLocked) controls.enabled = cameraMode === 'orbit';
+                    break;
+                case 'r':
+                    resetGame();
+                    break;
+                case 'l':
+                    toggleCameraLock();
+                    break;
+            }
+        }
+
+        function onPowerMeterClick(event) {
+            if (isBallsMoving()) return;
+            const rect = event.target.getBoundingClientRect();
+            const percentage = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+            power = percentage * maxPower;
+            updatePowerMeter();
+            event.target.style.boxShadow = '0 0 10px rgba(0, 255, 0, 0.7)';
+            setTimeout(() => event.target.style.boxShadow = 'none', 200);
+        }
+
+        function updatePowerMeter() {
+            const percentage = (power / maxPower) * 100;
+            const powerLevel = document.getElementById('power-level');
+            powerLevel.style.width = `${percentage}%`;
+            if (percentage < 33) {
+                powerLevel.style.background = 'linear-gradient(to right, #00ff00, #00ff00)';
+            } else if (percentage < 66) {
+                powerLevel.style.background = 'linear-gradient(to right, #00ff00, #ffff00)';
+            } else {
+                powerLevel.style.background = 'linear-gradient(to right, #00ff00, #ffff00, #ff0000)';
+            }
+            document.getElementById('shoot-btn').disabled = power < MIN_POWER;
+        }
+
+        function shootCueBall() {
+            if (power < MIN_POWER || isBallsMoving()) return;
+            const angle = cueBall.userData.angle || 0;
+            const forceMagnitude = power * 0.1;
+            const direction = new THREE.Vector3(
+                -Math.sin(angle) * Math.cos(elevationAngle),
+                Math.sin(elevationAngle),
+                -Math.cos(angle) * Math.cos(elevationAngle)
+            ).normalize();
+            const force = new CANNON.Vec3(
+                direction.x * forceMagnitude,
+                direction.y * forceMagnitude,
+                direction.z * forceMagnitude
+            );
+            const relpos = new CANNON.Vec3(
+                cueBall.userData.relPos.x,
+                cueBall.userData.relPos.y,
+                cueBall.userData.relPos.z
+            );
+            cueBall.userData.physicsBody.applyImpulse(force, relpos);
+            power = 0;
+            updatePowerMeter();
+            setTimeout(() => {
+                if (!isBallsMoving()) checkFoul();
+            }, 1000);
+        }
+
+        function updateCameraPosition() {
+            if (!cameraLocked) return;
+            const angle = cueBall.userData.angle || 0;
+            const dir = new THREE.Vector3(
+                -Math.sin(angle) * Math.cos(elevationAngle),
+                Math.sin(elevationAngle),
+                -Math.cos(angle) * Math.cos(elevationAngle)
+            ).normalize();
+            camera.position.copy(cueBall.position).sub(dir.multiplyScalar(lockedCameraDistance));
+            camera.lookAt(cueBall.position);
+        }
+
+        function toggleCameraLock() {
+            cameraLocked = !cameraLocked;
+            document.getElementById('lock-camera-btn').textContent = cameraLocked ? 'Unlock Camera' : 'Lock Camera to Ball';
+            if (cameraLocked) {
+                controls.enabled = false;
+                isHoveringCueBall = false;
+                renderer.domElement.style.cursor = 'default';
+                updateCameraPosition();
+            } else {
+                controls.target.set(0, 0, 0);
+                controls.minDistance = 10;
+                controls.maxDistance = 50;
+                controls.enabled = cameraMode === 'orbit';
+                controls.enableRotate = true;
+            }
+            updateAimingVisuals();
+        }
+
+        function isBallsMoving() {
+            return [cueBall, ...balls].some(ball => ball?.userData?.physicsBody?.velocity?.length() > 0.1);
+        }
+
+        function updatePhysics() {
+            physicsWorld.step(1/60);
+            [cueBall, ...balls].forEach(ball => {
+                if (!ball || !ball.userData.physicsBody) return;
+                const body = ball.userData.physicsBody;
+                const speed = body.velocity.length();
+                if (speed > 100) body.velocity.scale(0.95);
+                const pos = body.position;
+                const halfWidth = TABLE_WIDTH/2 - BALL_RADIUS;
+                const halfHeight = TABLE_HEIGHT/2 - BALL_RADIUS;
+                const halfLength = TABLE_LENGTH/2 - BALL_RADIUS;
+                if (Math.abs(pos.x) > halfWidth) { pos.x = Math.sign(pos.x) * halfWidth; body.velocity.x *= -0.8; }
+                if (Math.abs(pos.y) > halfHeight) { pos.y = Math.sign(pos.y) * halfHeight; body.velocity.y *= -0.8; }
+                if (Math.abs(pos.z) > halfLength) { pos.z = Math.sign(pos.z) * halfLength; body.velocity.z *= -0.8; }
+                ball.position.copy(body.position);
+                ball.quaternion.copy(body.quaternion);
+            });
+            checkPocketCollisions();
+        }
+
+        function checkPocketCollisions() {
+            physicsWorld.bodies.forEach(body => {
+                if (body.isTrigger) {
+                    [cueBall, ...balls].forEach(ball => {
+                        if (ball?.userData?.physicsBody && body.aabb.overlaps(ball.userData.physicsBody.aabb)) {
+                            handleBallInPocket(ball);
+                        }
+                    });
+                }
+            });
+        }
+
+        function handleBallInPocket(ball) {
+            if (ball === cueBall) {
+                scene.remove(cueBall);
+                physicsWorld.removeBody(cueBall.userData.physicsBody);
+                foul = true;
+                setTimeout(() => {
+                    cueBall.position.set(0, 0, -15);
+                    scene.add(cueBall);
+                    const newBody = new CANNON.Body({
+                        mass: 0.2,
+                        shape: new CANNON.Sphere(BALL_RADIUS),
+                        position: new CANNON.Vec3(0, 0, -15),
+                        linearDamping: 0.15,
+                        angularDamping: 0.15,
+                        material: new CANNON.Material("ballMaterial")
+                    });
+                    newBody.ccdSpeedThreshold = 0.5;
+                    newBody.ccdIterations = 10;
+                    cueBall.userData.physicsBody = newBody;
+                    cueBall.userData.relPos = new THREE.Vector3(0, 0, -BALL_RADIUS);
+                    physicsWorld.addBody(newBody);
+                    player1Turn = !player1Turn;
+                    updateUI();
+                }, 1000);
+                return;
+            }
+            scene.remove(ball);
+            physicsWorld.removeBody(ball.userData.physicsBody);
+            const index = balls.indexOf(ball);
+            if (index > -1) balls.splice(index, 1);
+            if (player1Type === null && ball.userData.number !== 8) {
+                player1Type = ball.userData.type;
+                player2Type = ball.userData.type === 'solid' ? 'stripe' : 'solid';
+                updatePlayerBallTypes();
+            }
+            if (ball.userData.number === 8) {
+                const currentPlayerBalls = player1Turn ? player1Balls : player2Balls;
+                if (currentPlayerBalls.every(b => !balls.includes(b))) {
+                    alert(player1Turn ? "Player 1 wins!" : "Player 2 wins!");
+                } else {
+                    alert(player1Turn ? "Player 1 loses! 8-ball pocketed too early." : "Player 2 loses! 8-ball pocketed too early.");
+                }
+                resetGame();
+                return;
+            }
+            if (player1Balls.includes(ball)) player1Balls.splice(player1Balls.indexOf(ball), 1);
+            if (player2Balls.includes(ball)) player2Balls.splice(player2Balls.indexOf(ball), 1);
+            const currentPlayerType = player1Turn ? player1Type : player2Type;
+            if (ball.userData.type !== currentPlayerType) foul = true;
+            updateUI();
+        }
+
+        function checkFoul() {
+            if (foul) {
+                foul = false;
+                player1Turn = !player1Turn;
+                updateUI();
+                return;
+            }
+            const ballHit = balls.some(ball => ball.userData.physicsBody.velocity.length() > 0.1);
+            if (!ballHit) {
+                foul = true;
+                player1Turn = !player1Turn;
+                updateUI();
+                return;
+            }
+            player1Turn = !player1Turn;
+            updateUI();
+        }
+
+        function updatePlayerBallTypes() {
+            player1Balls = balls.filter(ball => ball.userData.type === player1Type);
+            player2Balls = balls.filter(ball => ball.userData.type === player2Type);
+            document.getElementById('player1-balls').textContent = player1Type === 'solid' ? 'Solids' : 'Stripes';
+            document.getElementById('player2-balls').textContent = player2Type === 'solid' ? 'Solids' : 'Stripes';
+        }
+
+        function updateUI() {
+            document.getElementById('player-turn').textContent = player1Turn ? 'Player 1' : 'Player 2';
+            document.getElementById('player1-balls').textContent = player1Type 
+                ? `${player1Type === 'solid' ? 'Solids' : 'Stripes'} (${player1Balls.length} left)`
+                : `Solids (${player1Balls.length} left)`;
+            document.getElementById('player2-balls').textContent = player2Type 
+                ? `${player2Type === 'solid' ? 'Solids' : 'Stripes'} (${player2Balls.length} left)`
+                : `Stripes (${player2Balls.length} left)`;
+        }
+
+        function resetGame() {
+            scene.remove(cueBall);
+            physicsWorld.removeBody(cueBall.userData.physicsBody);
+            balls.forEach(ball => {
+                scene.remove(ball);
+                physicsWorld.removeBody(ball.userData.physicsBody);
+            });
+            balls = [];
+            player1Balls = [];
+            player2Balls = [];
+            player1Turn = true;
+            player1Type = null;
+            player2Type = null;
+            foul = false;
+            elevationAngle = 0;
+            lockedCameraDistance = 10;
+            isHoveringCueBall = false;
+            renderer.domElement.style.cursor = 'default';
+            controls.enableRotate = true;
+            createBalls();
+            camera.position.set(0, 25, -30);
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+            power = 0;
+            updatePowerMeter();
+            updateUI();
+            if (cameraLocked) {
+                cameraLocked = false;
+                document.getElementById('lock-camera-btn').textContent = 'Lock Camera to Ball';
+                controls.target.set(0, 0, 0);
+                controls.minDistance = 10;
+                controls.maxDistance = 50;
+                controls.enabled = cameraMode === 'orbit';
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePhysics();
+            if (isBallsMoving()) {
+                aimDot.visible = false;
+                trajectoryDots.forEach(dot => dot.visible = false);
+            } else {
+                updateAimingVisuals();
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

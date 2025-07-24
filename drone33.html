@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hypergraph Pruner in 3D with Three.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r100/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r100/examples/js/controls/FlyControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #pruned-container { width: 100%; height: 100vh; position: relative; }
+        #controls { position: absolute; top: 10px; left: 10px; z-index: 10; }
+        #fullscreen-btn { position: absolute; top: 10px; right: 10px; z-index: 10; }
+        #file-list { max-height: 200px; overflow-y: auto; margin-top: 10px; }
+        #file-list img { width: 50px; height: auto; margin-right: 10px; }
+        #file-list ul { list-style-type: none; padding: 0; }
+        #file-list li { display: flex; align-items: center; margin-bottom: 5px; }
+        #file-list select { margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <div id="pruned-container"></div> <!-- For pruned point cloud viz -->
+    <div id="controls">
+        <input type="file" id="imageInput" accept="image/*,video/*" multiple>
+        <button onclick="runPruner()">Run Pruner</button>
+        <label for="offset">Layer Offset:</label>
+        <input type="number" id="offset" value="6" min="0" max="50" step="0.1">
+        <label for="fillSpaces">Fill Spaces:</label>
+        <input type="checkbox" id="fillSpaces">
+        <label for="planet">Planet Mode:</label>
+        <input type="checkbox" id="planet">
+        <label for="multiple">Multiple Planets:</label>
+        <input type="checkbox" id="multiple">
+        <label for="numPlanets">Number of Planets:</label>
+        <input type="number" id="numPlanets" value="3" min="1" max="20" step="1">
+        <label for="doubleSided">Double Sided:</label>
+        <input type="checkbox" id="doubleSided">
+        <label for="videoMode">Video Mode:</label>
+        <input type="checkbox" id="videoMode">
+        <div class="section-title">Fireball Controls</div>
+        <label for="lightIntensity">Light Intensity:</label>
+        <input type="range" id="lightIntensity" min="0.1" max="2" step="0.1" value="0.7">
+        <label for="glowStrength">Glow Strength:</label>
+        <input type="range" id="glowStrength" min="0.1" max="2" step="0.1" value="0.7">
+        <label for="glowThickness">Glow Thickness:</label>
+        <input type="range" id="glowThickness" min="0.01" max="0.5" step="0.01" value="0.1">
+        <label for="fireballParticleCount">Particle Count:</label>
+        <input type="range" id="fireballParticleCount" min="1" max="10" step="1" value="6">
+        <label for="fireballParticleSize">Particle Size:</label>
+        <input type="range" id="fireballParticleSize" min="0.01" max="0.1" step="0.01" value="0.02">
+        <label for="spatialDustIntensity">Dust Intensity:</label>
+        <input type="range" id="spatialDustIntensity" min="0.0" max="100.0" step="0.01" value="0.3">
+        <label for="fireballParticleGravity">Particle Gravity:</label>
+        <input type="range" id="fireballParticleGravity" min="-10.5" max="100.5" step="0.01" value="0.3">
+        <label for="fireballParticleLifetime">Particle Lifetime:</label>
+        <input type="range" id="fireballParticleLifetime" min="0.5" max="3.0" step="0.1" value="1.5">
+        <label for="fireballParticleVelocity">Particle Velocity:</label>
+        <input type="range" id="fireballParticleVelocity" min="0.5" max="2.0" step="0.01" value="1.0">
+        <label for="fireballVariation">Variation:</label>
+        <input type="range" id="fireballVariation" min="0.0" max="1.0" step="0.01" value="0.5">
+        <label for="plasmaArcIntensity">Plasma Arc Intensity:</label>
+        <input type="range" id="plasmaArcIntensity" min="0.0" max="1.0" step="0.01" value="0.5">
+        <label for="plasmaArcLifetime">Plasma Arc Lifetime:</label>
+        <input type="range" id="plasmaArcLifetime" min="0.5" max="2.0" step="0.1" value="1.0">
+        <label for="fireballSize">Fireball Size:</label>
+        <input type="range" id="fireballSize" min="1" max="50" step="1" value="5">
+        <label for="fireballSpeed">Fireball Speed:</label>
+        <input type="range" id="fireballSpeed" min="50" max="500" step="10" value="200">
+        <label for="fireballFadeTime">Fireball Fade Time:</label>
+        <input type="range" id="fireballFadeTime" min="1" max="10" step="0.1" value="2">
+        <div id="file-list"></div>
+    </div>
+
+    <script>
+        let imageFiles = [];
+        let shaderSelections = [];
+        let fillFacesSelections = [];
+
+        let lightIntensity = 0.7;
+        let glowStrength = 0.7;
+        let glowThickness = 0.1;
+        let fireballParticleCount = 6;
+        let fireballParticleSize = 0.02;
+        let spatialDustIntensity = 0.3;
+        let fireballParticleGravity = 0.3;
+        let fireballParticleLifetime = 1.5;
+        let fireballParticleVelocity = 1.0;
+        let fireballVariation = 0.5;
+        let plasmaArcIntensity = 0.5;
+        let plasmaArcLifetime = 1.0;
+        let fireballs = [];
+        let enemyFireballs = [];
+        let explosionParticles = [];
+        let enemies = [];
+        let explosions = [];
+        let nextSpawnTime = 0;
+        const enemySpeed = 50;
+
+        const fireballVertexShader = `
+            varying vec2 vUv;
+            uniform float fireballRadius;
+            void main() {
+                vUv = uv;
+                vec3 pos = position;
+                float distFromCenter = length(pos.xy);
+                if (distFromCenter <= fireballRadius) {
+                    pos.z += sqrt(fireballRadius * fireballRadius - distFromCenter * distFromCenter);
+                }
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+            }
+        `;
+
+        const fireballFragmentShader = `
+            uniform float time;
+            uniform float fireballTime;
+            uniform float fadeTime;
+            uniform float lightIntensity;
+            uniform float glowStrength;
+            uniform float glowThickness;
+            uniform int fireballParticleCount;
+            uniform float fireballParticleSize;
+            uniform float spatialDustIntensity;
+            uniform float fireballParticleGravity;
+            uniform float fireballParticleLifetime;
+            uniform float fireballParticleVelocity;
+            uniform float fireballVariation;
+            uniform float plasmaArcIntensity;
+            uniform float plasmaArcLifetime;
+            uniform vec2 flowField;
+            uniform vec3 colorTint;
+            varying vec2 vUv;
+
+            float random(vec2 st) {
+                return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+            }
+
+            float noise(vec2 st) {
+                vec2 i = floor(st);
+                vec2 f = fract(st);
+                float a = random(i);
+                float b = random(i + vec2(1.0, 0.0));
+                float c = random(i + vec2(0.0, 1.0));
+                float d = random(i + vec2(1.0, 1.0));
+                vec2 u = f * f * (3.0 - 2.0 * f);
+                return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+            }
+
+            float fbm(vec2 st) {
+                float value = 0.0;
+                float amplitude = 0.5;
+                for (int i = 0; i < 6; i++) {
+                    value += amplitude * noise(st);
+                    st *= 2.0;
+                    amplitude *= 0.5;
+                }
+                return value;
+            }
+
+            float fireGlow(float d, float str, float thickness) {
+                return thickness / pow(max(d, 0.001), str);
+            }
+
+            vec2 heatDistortion(vec2 uv, vec2 center, float intensity) {
+                float n = fbm(uv * 5.0 + time * 0.5);
+                vec2 offset = vec2(n * 0.02, n * 0.01) * intensity;
+                return uv + offset;
+            }
+
+            float fireballShape(vec2 p, vec2 center, float size) {
+                float d = length(p - center);
+                float n = fbm(p * 6.0 + vec2(time * 1.5));
+                return d - size * (1.0 + n * 0.3);
+            }
+
+            float spatialDustShape(vec2 p, vec2 center, float seed) {
+                float cycleTime = mod(time + seed * 10.0, 2.0);
+                vec2 dustPos = center + vec2(
+                    sin(seed * 123.456 + time * 0.5) * 0.3,
+                    cos(seed * 78.912 + time * 0.5) * 0.3
+                );
+                float twinkle = sin(time * 5.0 + seed * 456.789) * 0.5 + 0.5;
+                float d = length(p - dustPos);
+                return d - 0.005 * (0.5 + twinkle * 0.5);
+            }
+
+            float plasmaArcShape(vec2 p, vec2 center, float arcTime, float seed, float lifetime) {
+                float t = arcTime / lifetime;
+                vec2 arcDir = vec2(
+                    sin(seed * 123.456 + time * 2.0) * 0.3,
+                    cos(seed * 78.912 + time * 2.0) * 0.3 + 0.2
+                );
+                float n = fbm(vec2(t * 5.0 + seed, time * 1.5));
+                vec2 acc = vec2(0.0, fireballParticleGravity);
+                vec2 arcPos = center + arcDir * t * 1.2 + 0.5 * acc * t * t;
+                arcPos += vec2(
+                    sin(t * 10.0 + seed) * 0.1 * n,
+                    cos(t * 10.0 + seed) * 0.1 * n
+                );
+                float d = length(p - arcPos);
+                return d - 0.005;
+            }
+
+            void main() {
+                vec2 uvCentered = vUv - 0.5;
+                float normalizedR = length(uvCentered) * 2.0;
+                if (normalizedR > 1.0) discard;
+                vec2 uv = vUv * 2.0 - 1.0;
+                vec3 fireColor = vec3(0.0);
+                vec2 fireballPos = vec2(0.0);
+                vec2 fireballUV = heatDistortion(uv, fireballPos, glowStrength * 0.8);
+                float fireballSize = 0.2 * smoothstep(0.0, 0.5, fireballTime) * (1.0 + 0.2 * sin(fireballTime * 5.0));
+                float fireball = fireballShape(fireballUV, fireballPos, fireballSize);
+                float variation = fbm(vec2(fireballTime * 2.0, fireballPos.x + fireballPos.y)) * fireballVariation;
+                float fireballIntensity = lightIntensity * 2.0 * (1.0 + 0.3 * sin(fireballTime * 8.0) + variation * 0.5);
+                float fireballGlow = fireGlow(fireball, glowStrength * 0.8, glowThickness * 2.0) * fireballIntensity;
+                float fireballFade = 1.0 - smoothstep(0.0, fadeTime, fireballTime);
+                vec3 fireballColor = mix(
+                    vec3(1.0, 0.5, 0.0),
+                    vec3(1.0, 1.0, 0.6 + variation * 0.4),
+                    smoothstep(-0.2, 0.2, fireball) + sin(fireballTime * 3.0) * 0.3 * fireballVariation
+                );
+                fireColor += fireballGlow * fireballColor * fireballFade * colorTint;
+                for (int i = 0; i < 10; i++) {
+                    if (i >= fireballParticleCount) break;
+                    float iFloat = float(i);
+                    float seed = iFloat * 123.456;
+                    vec2 initialVel = vec2(
+                        sin(seed + time) * 0.15 * fireballParticleVelocity + flowField.x * 0.05,
+                        cos(seed + time) * 0.1 * fireballParticleVelocity + flowField.y * 0.05
+                    );
+                    vec2 acc = vec2(0.0, fireballParticleGravity);
+                    float particleTime = mod(fireballTime + iFloat * 0.3, fireballParticleLifetime);
+                    float particleFade = smoothstep(fireballParticleLifetime, fireballParticleLifetime * 0.5, particleTime);
+                    vec2 particlePos = fireballPos + initialVel * particleTime + 0.5 * acc * particleTime * particleTime;
+                    float particle = length(fireballUV - particlePos) - fireballParticleSize * (0.5 + fbm(fireballUV * 8.0 + vec2(time * 2.0)) * 0.1);
+                    float particleGlow = fireGlow(particle, glowStrength * 0.6, glowThickness * 0.6) * lightIntensity;
+                    vec3 particleColor = vec3(1.0, 0.6, 0.2) * particleGlow * particleFade * fireballFade * colorTint;
+                    fireColor += particleColor;
+                }
+                for (int i = 0; i < 20; i++) {
+                    float iFloat = float(i);
+                    float seed = iFloat * 789.123;
+                    float dust = spatialDustShape(fireballUV, fireballPos, seed);
+                    float distToFireball = length(fireballUV - fireballPos);
+                    float dustFade = smoothstep(0.5, 0.2, distToFireball);
+                    float dustGlow = fireGlow(dust, glowStrength * 0.4, glowThickness * 0.4) * spatialDustIntensity * dustFade;
+                    vec3 dustColor = vec3(0.8, 0.8, 1.0) * dustGlow * fireballFade * colorTint;
+                    fireColor += dustColor;
+                }
+                for (int i = 0; i < 4; i++) {
+                    float iFloat = float(i);
+                    float seed = iFloat * 456.789;
+                    float arcTime = mod(fireballTime + iFloat * 0.2, plasmaArcLifetime);
+                    float arcFade = smoothstep(plasmaArcLifetime, plasmaArcLifetime * 0.5, arcTime);
+                    float arc = plasmaArcShape(fireballUV, fireballPos, arcTime, seed, plasmaArcLifetime);
+                    float arcGlow = fireGlow(arc, glowStrength * 0.5, glowThickness * 0.5) * plasmaArcIntensity;
+                    vec3 arcColor = i < 2 ? vec3(0.6, 0.8, 1.0) : vec3(1.0, 0.2, 0.2);
+                    arcColor *= arcGlow * arcFade * fireballFade * colorTint;
+                    fireColor += arcColor;
+                }
+                gl_FragColor = vec4(fireColor, length(fireColor) * 0.6);
+            }
+        `;
+
+        const explosionVertexShader = `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const explosionFragmentShader = `
+            uniform float time;
+            uniform float explosionTime;
+            uniform bool isElectric;
+            varying vec2 vUv;
+
+            float random(vec2 st) {
+                return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+            }
+
+            float noise(vec2 st) {
+                vec2 i = floor(st);
+                vec2 f = fract(st);
+                float a = random(i);
+                float b = random(i + vec2(1.0, 0.0));
+                float c = random(i + vec2(0.0, 1.0));
+                float d = random(i + vec2(1.0, 1.0));
+                vec2 u = f * f * (3.0 - 2.0 * f);
+                return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+            }
+
+            float fbm(vec2 st) {
+                float value = 0.0;
+                float amplitude = 0.5;
+                for (int i = 0; i < 6; i++) {
+                    value += amplitude * noise(st);
+                    st *= 2.0;
+                    amplitude *= 0.5;
+                }
+                return value;
+            }
+
+            void main() {
+                float alpha = 1.0 - smoothstep(0.0, 1.0, explosionTime);
+                vec3 color = vec3(1.0, 0.5, 0.0);
+                if (isElectric) {
+                    float n = fbm(vUv * 5.0 + time * 2.0);
+                    color = vec3(0.6, 0.8, 1.0) + n * 0.5;
+                    alpha *= (1.0 + sin(time * 20.0) * 0.2); // flicker
+                }
+                gl_FragColor = vec4(color, alpha);
+            }
+        `;
+
+        // Display selected files with previews
+        document.getElementById('imageInput').addEventListener('change', function() {
+            const newFiles = Array.from(this.files);
+            imageFiles = [...imageFiles, ...newFiles];
+            shaderSelections = [...shaderSelections, ...new Array(newFiles.length).fill('Sway')];
+            fillFacesSelections = [...fillFacesSelections, ...new Array(newFiles.length).fill(false)];
+            displayFileList();
+            this.value = ''; // Clear input to allow adding more files
+        });
+
+        function displayFileList() {
+            const listDiv = document.getElementById('file-list');
+            listDiv.innerHTML = '';
+            if (imageFiles.length > 0) {
+                const ul = document.createElement('ul');
+                imageFiles.forEach((file, index) => {
+                    const li = document.createElement('li');
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    img.onload = () => URL.revokeObjectURL(img.src); // Clean up
+                    li.appendChild(img);
+                    li.appendChild(document.createTextNode(file.name));
+                    const select = document.createElement('select');
+                    select.innerHTML = '<option value="Sway">Sway</option><option value="Fire">Fire</option>';
+                    select.value = shaderSelections[index];
+                    select.addEventListener('change', (e) => {
+                        shaderSelections[index] = e.target.value;
+                    });
+                    li.appendChild(select);
+                    li.appendChild(document.createTextNode(' Fill Faces: '));
+                    const fillCheck = document.createElement('input');
+                    fillCheck.type = 'checkbox';
+                    fillCheck.checked = fillFacesSelections[index];
+                    fillCheck.addEventListener('change', (e) => {
+                        fillFacesSelections[index] = e.target.checked;
+                    });
+                    li.appendChild(fillCheck);
+                    ul.appendChild(li);
+                });
+                listDiv.appendChild(ul);
+            }
+        }
+
+        // Generate point cloud from image and get dimensions
+        async function getPointCloudFromImage(imageFile, addExtraPoints, doubleSided) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const data = ctx.getImageData(0, 0, img.width, img.height).data;
+
+                    const positivePoints = [];
+                    const positiveColors = [];
+                    // Original points
+                    for (let y = 0; y < img.height; y++) {
+                        for (let x = 0; x < img.width; x++) {
+                            const idx = (y * img.width + x) * 4;
+                            const r = data[idx] / 255;
+                            const g = data[idx+1] / 255;
+                            const b = data[idx+2] / 255;
+                            const intensity = (r + g + b) / 3;
+                            positivePoints.push([x - img.width / 2, intensity * 5, y - img.height / 2]);
+                            positiveColors.push([r, g, b]);
+                        }
+                    }
+                    // Interpolated points between rows if addExtraPoints is true
+                    if (addExtraPoints) {
+                        for (let y = 0; y < img.height - 1; y++) {
+                            for (let x = 0; x < img.width; x++) {
+                                const idx1 = (y * img.width + x) * 4;
+                                const idx2 = ((y + 1) * img.width + x) * 4;
+                                const r = (data[idx1] / 255 + data[idx2] / 255) / 2;
+                                const g = (data[idx1 + 1] / 255 + data[idx2 + 1] / 255) / 2;
+                                const b = (data[idx1 + 2] / 255 + data[idx2 + 2] / 255) / 2;
+                                const intensity = (r + g + b) / 3;
+                                positivePoints.push([x - img.width / 2, intensity * 5, y + 0.5 - img.height / 2]);
+                                positiveColors.push([r, g, b]);
+                            }
+                        }
+                    }
+                    let points = positivePoints.map(p => [...p]);
+                    let colors = positiveColors.map(c => [...c]);
+                    if (doubleSided) {
+                        positivePoints.forEach((p, i) => {
+                            points.push([p[0], -p[1], p[2]]);
+                            colors.push([...positiveColors[i]]);
+                        });
+                    }
+                    resolve({points, colors, width: img.width, height: img.height, originalCount: positivePoints.length});
+                };
+                img.src = URL.createObjectURL(imageFile);
+            });
+        }
+
+        async function getPointCloudFromVideo(videoFile, addExtraPoints, doubleSided) {
+            return new Promise((resolve) => {
+                const video = document.createElement('video');
+                video.src = URL.createObjectURL(videoFile);
+                video.muted = true;
+                video.loop = true;
+                video.oncanplay = () => {
+                    video.play();
+                    const width = video.videoWidth;
+                    const height = video.videoHeight;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0);
+                    const data = ctx.getImageData(0, 0, width, height).data;
+                    const positivePoints = [];
+                    const positiveUvs = [];
+                    const positiveColors = []; // dummy
+                    for (let y = 0; y < height; y++) {
+                        for (let x = 0; x < width; x++) {
+                            const idx = (y * width + x) * 4;
+                            const r = data[idx] / 255;
+                            const g = data[idx + 1] / 255;
+                            const b = data[idx + 2] / 255;
+                            const intensity = (r + g + b) / 3;
+                            positivePoints.push([x - width / 2, intensity * 5, y - height / 2]);
+                            positiveUvs.push([x / width, 1 - y / height]);
+                            positiveColors.push([1, 1, 1]);
+                        }
+                    }
+                    if (addExtraPoints) {
+                        for (let y = 0; y < height - 1; y++) {
+                            for (let x = 0; x < width; x++) {
+                                const idx1 = (y * width + x) * 4;
+                                const idx2 = ((y + 1) * width + x) * 4;
+                                const r = (data[idx1] / 255 + data[idx2] / 255) / 2;
+                                const g = (data[idx1 + 1] / 255 + data[idx2 + 1] / 255) / 2;
+                                const b = (data[idx1 + 2] / 255 + data[idx2 + 2] / 255) / 2;
+                                const intensity = (r + g + b) / 3;
+                                positivePoints.push([x - width / 2, intensity * 5, y + 0.5 - height / 2]);
+                                positiveUvs.push([x / width, 1 - (y + 0.5) / height]);
+                                positiveColors.push([1, 1, 1]);
+                            }
+                        }
+                    }
+                    let points = positivePoints.map(p => [...p]);
+                    let uvs = positiveUvs.map(u => [...u]);
+                    let colors = positiveColors.map(c => [...c]);
+                    if (doubleSided) {
+                        positivePoints.forEach((p, i) => {
+                            points.push([p[0], -p[1], p[2]]);
+                            uvs.push(positiveUvs[i]);
+                            colors.push(positiveColors[i]);
+                        });
+                    }
+                    resolve({points, colors, width, height, originalCount: positivePoints.length, uvs, video});
+                };
+            });
+        }
+
+        function createDroneModel() {
+            const drone = new THREE.Group();
+
+            // Body: Sphere with improved glass shader
+            const bodyGeometry = new THREE.SphereGeometry(2.5, 32, 32);
+            const bodyMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0.0 }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    varying vec3 vViewPosition;
+                    varying vec3 vWorldPosition;
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                        vViewPosition = -mvPosition.xyz;
+                        vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+                        gl_Position = projectionMatrix * mvPosition;
+                    }
+                `,
+                fragmentShader: `
+                    uniform float time;
+                    varying vec3 vNormal;
+                    varying vec3 vViewPosition;
+                    varying vec3 vWorldPosition;
+                    float random(vec3 st) {
+                        return fract(sin(dot(st.xyz, vec3(12.9898,78.233,45.5432))) * 43758.5453123);
+                    }
+                    void main() {
+                        vec3 normal = normalize(vNormal);
+                        vec3 viewDir = normalize(vViewPosition);
+                        float fresnel = dot(normal, viewDir);
+                        fresnel = clamp(1.0 - fresnel, 0.0, 1.0);
+                        fresnel = pow(fresnel, 3.0);
+                        float noise = random(vWorldPosition + time * 0.5) * 0.1;
+                        vec3 baseColor = vec3(0.1 + noise, 0.4 + noise, 0.8 + noise);
+                        vec3 color = baseColor + fresnel * vec3(1.0, 1.0, 1.0);
+                        float opacity = fresnel * 0.6 + 0.3;
+                        gl_FragColor = vec4(color, opacity);
+                    }
+                `,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            drone.add(body);
+
+            // Arms
+            let armMaterials = [];
+            const armMeshes = [];
+            for (let arm = 0; arm < 4; arm++) {
+                const angle = arm * Math.PI / 2;
+                const armGeometry = new THREE.BoxGeometry(8, 0.4, 0.4);
+                const armMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0.0 }
+                    },
+                    vertexShader: `
+                        varying vec3 vNormal;
+                        varying vec3 vPosition;
+                        void main() {
+                            vNormal = normalize(normalMatrix * normal);
+                            vPosition = - (modelViewMatrix * vec4(position, 1.0)).xyz;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform float time;
+                        varying vec3 vNormal;
+                        varying vec3 vPosition;
+                        void main() {
+                            vec3 viewDir = normalize(vPosition);
+                            float fresnel = pow(1.0 - dot(vNormal, viewDir), 3.0);
+                            vec3 color = vec3(0.7, 0.7, 0.7) + fresnel * vec3(1.0, 1.0, 1.0);
+                            gl_FragColor = vec4(color, 1.0);
+                        }
+                    `,
+                    side: THREE.DoubleSide
+                });
+                const armMesh = new THREE.Mesh(armGeometry, armMaterial);
+                armMesh.position.set(Math.cos(angle) * 4, 0, Math.sin(angle) * 4);
+                armMesh.rotation.y = angle;
+                drone.add(armMesh);
+                armMeshes.push(armMesh);
+                armMaterials.push(armMaterial);
+            }
+
+            // Propellers
+            const propMeshes = [];
+            const propMaterials = [];
+            for (let prop = 0; prop < 4; prop++) {
+                const angle = prop * Math.PI / 2;
+                const px = Math.cos(angle) * 8;
+                const pz = Math.sin(angle) * 8;
+                const propGeometry = new THREE.CircleGeometry(2.5, 32);
+                const propMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0.0 }
+                    },
+                    vertexShader: `
+                        varying vec2 vUv;
+                        void main() {
+                            vUv = uv;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform float time;
+                        varying vec2 vUv;
+                        void main() {
+                            vec2 uv = vUv - 0.5;
+                            float r = length(uv);
+                            if (r > 0.5) discard;
+                            float angle = atan(uv.y, uv.x);
+                            float swirl = sin(angle * 4.0 + time * 2.0) * 0.5 + 0.5;
+                            vec3 color = vec3(0.0, 1.0, 0.0) * swirl;
+                            gl_FragColor = vec4(color, swirl);
+                        }
+                    `,
+                    transparent: true,
+                    side: THREE.DoubleSide
+                });
+                const propMesh = new THREE.Mesh(propGeometry, propMaterial);
+                propMesh.position.set(px, 0.5, pz);
+                propMesh.rotation.x = Math.PI / 2; // flat
+                drone.add(propMesh);
+                propMeshes.push(propMesh);
+                propMaterials.push(propMaterial);
+            }
+
+            // Eyes and cameras
+            // Two big eyes
+            const bigEyeMaterial = new THREE.MeshBasicMaterial({color: 0x000000});
+            const bigEye1 = new THREE.SphereGeometry(0.8, 16, 16);
+            const bigEyeMesh1 = new THREE.Mesh(bigEye1, bigEyeMaterial);
+            bigEyeMesh1.position.set(0, 0.5, 2.5); // Front
+            drone.add(bigEyeMesh1);
+            const bigEye2 = new THREE.SphereGeometry(0.8, 16, 16);
+            const bigEyeMesh2 = new THREE.Mesh(bigEye2, bigEyeMaterial);
+            bigEyeMesh2.position.set(0, 0.5, -2.5); // Back
+            drone.add(bigEyeMesh2);
+
+            // Four big cameras like eyes
+            const cameraMaterial = new THREE.MeshBasicMaterial({color: 0x0000ff}); // Blue for cameras
+            const cameraPositions = [
+                {x: 2.5, y: 0.5, z: 0}, // Right
+                {x: -2.5, y: 0.5, z: 0}, // Left
+                {x: 0, y: 1.5, z: 0}, // Top
+                {x: 0, y: -0.5, z: 0} // Bottom
+            ];
+            cameraPositions.forEach(pos => {
+                const cameraGeo = new THREE.SphereGeometry(0.6, 16, 16);
+                const cameraMesh = new THREE.Mesh(cameraGeo, cameraMaterial);
+                cameraMesh.position.set(pos.x, pos.y, pos.z);
+                drone.add(cameraMesh);
+            });
+
+            return {drone, propMeshes, propMaterials, bodyMaterial, armMaterials};
+        }
+
+        function createEnemyDroneModel() {
+            const enemy = new THREE.Group();
+
+            // Body: Sphere with crystal shader, red
+            const bodyGeometry = new THREE.SphereGeometry(2.5, 32, 32);
+            const bodyMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0.0 }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    varying vec3 vViewPosition;
+                    varying vec3 vWorldPosition;
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                        vViewPosition = -mvPosition.xyz;
+                        vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+                        gl_Position = projectionMatrix * mvPosition;
+                    }
+                `,
+                fragmentShader: `
+                    uniform float time;
+                    varying vec3 vNormal;
+                    varying vec3 vViewPosition;
+                    varying vec3 vWorldPosition;
+                    float random(vec3 st) {
+                        return fract(sin(dot(st.xyz, vec3(12.9898,78.233,45.5432))) * 43758.5453123);
+                    }
+                    void main() {
+                        vec3 normal = normalize(vNormal);
+                        vec3 viewDir = normalize(vViewPosition);
+                        float fresnel = dot(normal, viewDir);
+                        fresnel = clamp(1.0 - fresnel, 0.0, 1.0);
+                        fresnel = pow(fresnel, 3.0);
+                        float noise = random(vWorldPosition + time * 0.5) * 0.1;
+                        vec3 baseColor = vec3(0.8 + noise, 0.1 + noise, 0.1 + noise);
+                        vec3 color = baseColor + fresnel * vec3(1.0, 0.5, 0.5);
+                        float opacity = fresnel * 0.6 + 0.3;
+                        gl_FragColor = vec4(color, opacity);
+                    }
+                `,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            enemy.add(body);
+
+            // Arms
+            let armMaterials = [];
+            const armMeshes = [];
+            for (let arm = 0; arm < 4; arm++) {
+                const angle = arm * Math.PI / 2;
+                const armGeometry = new THREE.BoxGeometry(8, 0.4, 0.4);
+                const armMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0.0 }
+                    },
+                    vertexShader: `
+                        varying vec3 vNormal;
+                        varying vec3 vPosition;
+                        void main() {
+                            vNormal = normalize(normalMatrix * normal);
+                            vPosition = - (modelViewMatrix * vec4(position, 1.0)).xyz;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform float time;
+                        varying vec3 vNormal;
+                        varying vec3 vPosition;
+                        void main() {
+                            vec3 viewDir = normalize(vPosition);
+                            float fresnel = pow(1.0 - dot(vNormal, viewDir), 3.0);
+                            vec3 color = vec3(0.7, 0.2, 0.2) + fresnel * vec3(1.0, 0.5, 0.5);
+                            gl_FragColor = vec4(color, 1.0);
+                        }
+                    `,
+                    side: THREE.DoubleSide
+                });
+                const armMesh = new THREE.Mesh(armGeometry, armMaterial);
+                armMesh.position.set(Math.cos(angle) * 4, 0, Math.sin(angle) * 4);
+                armMesh.rotation.y = angle;
+                enemy.add(armMesh);
+                armMeshes.push(armMesh);
+                armMaterials.push(armMaterial);
+            }
+
+            // Propellers with red helix
+            const propMeshes = [];
+            const propMaterials = [];
+            for (let prop = 0; prop < 4; prop++) {
+                const angle = prop * Math.PI / 2;
+                const px = Math.cos(angle) * 8;
+                const pz = Math.sin(angle) * 8;
+                const propGeometry = new THREE.CircleGeometry(2.5, 32);
+                const propMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0.0 }
+                    },
+                    vertexShader: `
+                        varying vec2 vUv;
+                        void main() {
+                            vUv = uv;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform float time;
+                        varying vec2 vUv;
+                        void main() {
+                            vec2 uv = vUv - 0.5;
+                            float r = length(uv);
+                            if (r > 0.5) discard;
+                            float angle = atan(uv.y, uv.x);
+                            float swirl = sin(angle * 4.0 + time * 2.0) * 0.5 + 0.5;
+                            vec3 color = vec3(1.0, 0.0, 0.0) * swirl;
+                            gl_FragColor = vec4(color, swirl);
+                        }
+                    `,
+                    transparent: true,
+                    side: THREE.DoubleSide
+                });
+                const propMesh = new THREE.Mesh(propGeometry, propMaterial);
+                propMesh.position.set(px, 0.5, pz);
+                propMesh.rotation.x = Math.PI / 2; // flat
+                enemy.add(propMesh);
+                propMeshes.push(propMesh);
+                propMaterials.push(propMaterial);
+            }
+
+            // Eyes and cameras
+            // Two big eyes
+            const bigEyeMaterial = new THREE.MeshBasicMaterial({color: 0x000000});
+            const bigEye1 = new THREE.SphereGeometry(0.8, 16, 16);
+            const bigEyeMesh1 = new THREE.Mesh(bigEye1, bigEyeMaterial);
+            bigEyeMesh1.position.set(0, 0.5, 2.5); // Front
+            enemy.add(bigEyeMesh1);
+            const bigEye2 = new THREE.SphereGeometry(0.8, 16, 16);
+            const bigEyeMesh2 = new THREE.Mesh(bigEye2, bigEyeMaterial);
+            bigEyeMesh2.position.set(0, 0.5, -2.5); // Back
+            enemy.add(bigEyeMesh2);
+
+            // Four big cameras like eyes
+            const cameraMaterial = new THREE.MeshBasicMaterial({color: 0xff0000}); // Red for cameras
+            const cameraPositions = [
+                {x: 2.5, y: 0.5, z: 0}, // Right
+                {x: -2.5, y: 0.5, z: 0}, // Left
+                {x: 0, y: 1.5, z: 0}, // Top
+                {x: 0, y: -0.5, z: 0} // Bottom
+            ];
+            cameraPositions.forEach(pos => {
+                const cameraGeo = new THREE.SphereGeometry(0.6, 16, 16);
+                const cameraMesh = new THREE.Mesh(cameraGeo, cameraMaterial);
+                cameraMesh.position.set(pos.x, pos.y, pos.z);
+                enemy.add(cameraMesh);
+            });
+
+            return {drone: enemy, propMeshes, propMaterials, bodyMaterial, armMaterials};
+        }
+
+        // Render point cloud with Three.js using custom shader for display
+        function renderPrunedCloud(imageDatas, containerId, offset, shaderSelections, fillFacesSelections, planet, multiple, numPlanets, doubleSided, videoMode) {
+            const scene = new THREE.Scene();
+            scene.add(new THREE.AmbientLight(0xffffff)); // Add light to avoid dark screen
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+            camera.updateProjectionMatrix();
+            const renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            const prunedContainer = document.getElementById(containerId);
+            prunedContainer.innerHTML = ''; // Clear previous renderer if any
+            prunedContainer.appendChild(renderer.domElement);
+
+            // Add fullscreen button dynamically
+            const fullscreenBtn = document.createElement('button');
+            fullscreenBtn.id = 'fullscreen-btn';
+            fullscreenBtn.textContent = 'Full Screen';
+            fullscreenBtn.style.position = 'absolute';
+            fullscreenBtn.style.top = '10px';
+            fullscreenBtn.style.right = '10px';
+            fullscreenBtn.style.zIndex = '10';
+            prunedContainer.appendChild(fullscreenBtn);
+
+            fullscreenBtn.onclick = () => {
+                if (!document.fullscreenElement) {
+                    prunedContainer.requestFullscreen().catch(err => console.log(err));
+                } else {
+                    document.exitFullscreen();
+                }
+            };
+
+            // Add nebula background
+            const skyGeometry = new THREE.SphereGeometry(5000, 32, 32);
+            const skyMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0.0 }
+                },
+                vertexShader: `
+                    varying vec3 vDirection;
+                    void main() {
+                        vDirection = normalize(position);
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float time;
+                    varying vec3 vDirection;
+
+                    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+
+                    float snoise(vec2 v) {
+                        const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+                        vec2 i  = floor(v + dot(v, C.yy) );
+                        vec2 x0 = v -   i + dot(i, C.xx);
+                        vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+                        vec4 x12 = x0.xyxy + C.xxzz;
+                        x12.xy -= i1;
+                        i = mod289(i);
+                        vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
+                        vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+                        m = m*m ;
+                        m = m*m ;
+                        vec3 x = 2.0 * fract(p * C.www) - 1.0;
+                        vec3 h = abs(x) - 0.5;
+                        vec3 ox = floor(x + 0.5);
+                        vec3 a0 = x - ox;
+                        m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+                        vec3 g;
+                        g.x  = a0.x  * x0.x  + h.x  * x0.y;
+                        g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+                        return 130.0 * dot(m, g);
+                    }
+
+                    float fbm(in vec2 st) {
+                        float value = 0.0;
+                        float amplitude = 0.5;
+                        for (int i = 0; i < 4; i++) {
+                            value += amplitude * snoise(st);
+                            st *= 2.0;
+                            amplitude *= 0.5;
+                        }
+                        return value;
+                    }
+
+                    void main() {
+                        vec2 uv = vec2(0.5 + atan(vDirection.z, vDirection.x)/(2.0*3.1415926535), 0.5 - asin(vDirection.y)/3.1415926535);
+                        float n = fbm(uv * 5.0 + time * 0.1);
+                        vec3 color = mix(vec3(0.05,0.025,0.1), vec3(0.4,0.2,0.3), n);
+
+                        // Add stars
+                        float stars = snoise(uv * 200.0);
+                        stars = smoothstep(0.95, 1.0, stars);
+                        color += vec3(stars * 2.0);
+
+                        gl_FragColor = vec4(color, 1.0);
+                    }
+                `,
+                side: THREE.BackSide,
+                depthWrite: false
+            });
+            const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+            scene.add(sky);
+
+            const maxWidth = Math.max(...imageDatas.map(d => d.width));
+            const maxDepth = Math.max(...imageDatas.map(d => d.height));
+
+            let materials = [skyMaterial];
+
+            let dronePos, droneLook;
+            let currentY = 0;
+
+            const cloudGroup = new THREE.Group(); // Group to hold multiple clouds
+            scene.add(cloudGroup);
+
+            let towerGroup;
+            let lastZ = 0;
+            let tilingThreshold = maxDepth; // Tile based on image height in z
+
+            // Create drone before modes
+            const {drone, propMeshes, propMaterials, bodyMaterial, armMaterials} = createDroneModel(camera);
+            scene.add(drone);
+            materials.push(...propMaterials);
+            materials.push(bodyMaterial);
+            materials.push(...armMaterials);
+
+            let videoTexture;
+            if (videoMode) {
+                const video = imageDatas[0].video;
+                videoTexture = new THREE.VideoTexture(video);
+                videoTexture.minFilter = THREE.LinearFilter;
+                videoTexture.magFilter = THREE.LinearFilter;
+            }
+
+            const clusterSize = 2000; // Adjust as needed for spacing
+
+            if (planet) {
+                const baseRadius = 200;
+                for (let p = 0; p < (multiple ? numPlanets : 1); p++) {
+                    const planetGroup = new THREE.Group();
+                    for (let i = 0; i < imageDatas.length; i++) {
+                        const data = imageDatas[i];
+                        const fillThis = fillFacesSelections[i];
+                        const pointSizeLine = fillThis ? '' : 'gl_PointSize = 2.0;';
+                        const radius = baseRadius + i * offset;
+                        const verts = [];
+                        const cols = [];
+                        const uvs = [];
+                        const widthHalf = data.width / 2;
+                        const heightHalf = data.height / 2;
+                        data.points.forEach((pos, j) => {
+                            const lon = (pos[0] / widthHalf) * Math.PI; // -pi to pi
+                            const lat = (pos[2] / heightHalf) * (Math.PI / 2); // -pi/2 to pi/2
+                            const phi = Math.PI / 2 - lat;
+                            const theta = lon;
+                            const x = Math.sin(phi) * Math.cos(theta);
+                            const y = Math.cos(phi);
+                            const z = Math.sin(phi) * Math.sin(theta);
+                            const normal = new THREE.Vector3(x, y, z);
+                            const spherePos = normal.clone().multiplyScalar(radius);
+                            const finalPos = spherePos.add(normal.multiplyScalar(pos[1]));
+                            verts.push(finalPos.x, finalPos.y, finalPos.z);
+                            cols.push(...data.colors[j]);
+                            if (videoMode) {
+                                uvs.push(...data.uvs[j]);
+                            }
+                        });
+                        const geometry = new THREE.BufferGeometry();
+                        geometry.addAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+                        if (videoMode) {
+                            geometry.addAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
+                        } else {
+                            geometry.addAttribute('color', new THREE.BufferAttribute(new Float32Array(cols), 3));
+                        }
+
+                        const shaderType = shaderSelections[i];
+                        let vertexShader, fragmentShader;
+
+                        if (videoMode) {
+                            vertexShader = `
+                                uniform float time;
+                                varying vec2 vUv;
+                                ${shaderType === 'Fire' ? 'varying float vY;' : ''}
+                                void main() {
+                                    vUv = uv;
+                                    ${shaderType === 'Fire' ? 'vY = position.y;' : ''}
+                                    vec3 pos = position;
+                                    ${shaderType === 'Sway' ? 'pos.y += sin(time + position.x * 0.1) * 0.5;' : ''}
+                                    ${shaderType === 'Fire' ? 'pos.y += sin(time * 2.0 + position.x * 0.3 + position.z * 0.2) * 1.0; pos.x += cos(time * 1.5 + position.y * 0.1) * 0.5; pos.z += sin(time * 1.8 + position.y * 0.15) * 0.5;' : ''}
+                                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                                    ${pointSizeLine}
+                                }
+                            `;
+                            fragmentShader = `
+                                uniform float time;
+                                uniform sampler2D videoTexture;
+                                varying vec2 vUv;
+                                ${shaderType === 'Fire' ? 'varying float vY;' : ''}
+                                void main() {
+                                    vec4 baseColor = texture2D(videoTexture, vUv);
+                                    ${shaderType === 'Sway' ? 'gl_FragColor = baseColor;' : ''}
+                                    ${shaderType === 'Fire' ? 'float flicker = sin(time * 5.0 + vY * 0.2) * 0.2 + 0.8; vec3 fireColor = mix(vec3(1.0, 0.2, 0.0), vec3(1.0, 0.8, 0.0), (vY + 5.0) / 10.0); gl_FragColor = baseColor * vec4(fireColor * flicker, 1.0);' : ''}
+                                }
+                            `;
+                        } else {
+                            vertexShader = `
+                                uniform float time;
+                                varying vec3 vColor;
+                                ${shaderType === 'Fire' ? 'varying float vY;' : ''}
+                                void main() {
+                                    vColor = color;
+                                    ${shaderType === 'Fire' ? 'vY = position.y;' : ''}
+                                    vec3 pos = position;
+                                    ${shaderType === 'Sway' ? 'pos.y += sin(time + position.x * 0.1) * 0.5;' : ''}
+                                    ${shaderType === 'Fire' ? 'pos.y += sin(time * 2.0 + position.x * 0.3 + position.z * 0.2) * 1.0; pos.x += cos(time * 1.5 + position.y * 0.1) * 0.5; pos.z += sin(time * 1.8 + position.y * 0.15) * 0.5;' : ''}
+                                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                                    ${pointSizeLine}
+                                }
+                            `;
+                            fragmentShader = `
+                                uniform float time;
+                                varying vec3 vColor;
+                                ${shaderType === 'Fire' ? 'varying float vY;' : ''}
+                                void main() {
+                                    ${shaderType === 'Sway' ? 'gl_FragColor = vec4(vColor, 1.0);' : ''}
+                                    ${shaderType === 'Fire' ? 'float flicker = sin(time * 5.0 + vY * 0.2) * 0.2 + 0.8; vec3 fireColor = mix(vec3(1.0, 0.2, 0.0), vec3(1.0, 0.8, 0.0), (vY + 5.0) / 10.0); gl_FragColor = vec4(vColor * fireColor * flicker, 1.0);' : ''}
+                                }
+                            `;
+                        }
+
+                        const material = new THREE.ShaderMaterial({
+                            uniforms: {
+                                time: { value: 0.0 },
+                                ...(videoMode ? { videoTexture: { value: videoTexture } } : {})
+                            },
+                            vertexShader: vertexShader,
+                            fragmentShader: fragmentShader,
+                            ...(videoMode ? {} : { vertexColors: true }),
+                            side: THREE.DoubleSide
+                        });
+                        materials.push(material);
+
+                        if (fillThis) {
+                            const indices = [];
+                            for (let y = 0; y < data.height - 1; y++) {
+                                for (let x = 0; x < data.width - 1; x++) {
+                                    const a = y * data.width + x;
+                                    const b = y * data.width + x + 1;
+                                    const c = (y + 1) * data.width + x + 1;
+                                    const d = (y + 1) * data.width + x;
+                                    indices.push(a, b, c);
+                                    indices.push(a, c, d);
+                                }
+                            }
+                            if (doubleSided) {
+                                const offset = data.originalCount;
+                                for (let y = 0; y < data.height - 1; y++) {
+                                    for (let x = 0; x < data.width - 1; x++) {
+                                        const a = y * data.width + x + offset;
+                                        const b = y * data.width + x + 1 + offset;
+                                        const c = (y + 1) * data.width + x + 1 + offset;
+                                        const d = (y + 1) * data.width + x + offset;
+                                        // Reverse winding for back side
+                                        indices.push(a, c, b);
+                                        indices.push(a, d, c);
+                                    }
+                                }
+                            }
+                            geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
+                            const mesh = new THREE.Mesh(geometry, material);
+                            planetGroup.add(mesh);
+                        } else {
+                            const points = new THREE.Points(geometry, material);
+                            planetGroup.add(points);
+                        }
+                    }
+
+                    if (multiple) {
+                        planetGroup.position.set(
+                            (Math.random() - 0.5) * clusterSize,
+                            (Math.random() - 0.5) * clusterSize,
+                            (Math.random() - 0.5) * clusterSize
+                        );
+                    }
+                    scene.add(planetGroup);
+                }
+                const totalRadius = baseRadius + (imageDatas.length - 1) * offset + 50;
+                if (multiple) {
+                    dronePos = new THREE.Vector3(0, 0, clusterSize / 2 + totalRadius);
+                    droneLook = new THREE.Vector3(0, 0, 0);
+                } else {
+                    dronePos = new THREE.Vector3(0, 0, totalRadius);
+                    droneLook = new THREE.Vector3(0, 0, 0);
+                }
+            } else {
+                towerGroup = new THREE.Group();
+                for (let i = 0; i < imageDatas.length; i++) {
+                    const data = imageDatas[i];
+                    const fillThis = fillFacesSelections[i];
+                    const pointSizeLine = fillThis ? '' : 'gl_PointSize = 2.0;';
+                    const shaderType = shaderSelections[i];
+                    let vertexShader, fragmentShader;
+
+                    if (videoMode) {
+                        vertexShader = `
+                            uniform float time;
+                            varying vec2 vUv;
+                            ${shaderType === 'Fire' ? 'varying float vY;' : ''}
+                            void main() {
+                                vUv = uv;
+                                ${shaderType === 'Fire' ? 'vY = position.y;' : ''}
+                                vec3 pos = position;
+                                ${shaderType === 'Sway' ? 'pos.y += sin(time + position.x * 0.1) * 0.5;' : ''}
+                                ${shaderType === 'Fire' ? 'pos.y += sin(time * 2.0 + position.x * 0.3 + position.z * 0.2) * 1.0; pos.x += cos(time * 1.5 + position.y * 0.1) * 0.5; pos.z += sin(time * 1.8 + position.y * 0.15) * 0.5;' : ''}
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                                ${pointSizeLine}
+                            }
+                        `;
+                        fragmentShader = `
+                            uniform float time;
+                            uniform sampler2D videoTexture;
+                            varying vec2 vUv;
+                            ${shaderType === 'Fire' ? 'varying float vY;' : ''}
+                            void main() {
+                                vec4 baseColor = texture2D(videoTexture, vUv);
+                                ${shaderType === 'Sway' ? 'gl_FragColor = baseColor;' : ''}
+                                ${shaderType === 'Fire' ? 'float flicker = sin(time * 5.0 + vY * 0.2) * 0.2 + 0.8; vec3 fireColor = mix(vec3(1.0, 0.2, 0.0), vec3(1.0, 0.8, 0.0), (vY + 5.0) / 10.0); gl_FragColor = baseColor * vec4(fireColor * flicker, 1.0);' : ''}
+                            }
+                        `;
+                    } else {
+                        vertexShader = `
+                            uniform float time;
+                            varying vec3 vColor;
+                            ${shaderType === 'Fire' ? 'varying float vY;' : ''}
+                            void main() {
+                                vColor = color;
+                                ${shaderType === 'Fire' ? 'vY = position.y;' : ''}
+                                vec3 pos = position;
+                                ${shaderType === 'Sway' ? 'pos.y += sin(time + position.x * 0.1) * 0.5;' : ''}
+                                ${shaderType === 'Fire' ? 'pos.y += sin(time * 2.0 + position.x * 0.3 + position.z * 0.2) * 1.0; pos.x += cos(time * 1.5 + position.y * 0.1) * 0.5; pos.z += sin(time * 1.8 + position.y * 0.15) * 0.5;' : ''}
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                                ${pointSizeLine}
+                            }
+                        `;
+                        fragmentShader = `
+                            uniform float time;
+                            varying vec3 vColor;
+                            ${shaderType === 'Fire' ? 'varying float vY;' : ''}
+                            void main() {
+                                ${shaderType === 'Sway' ? 'gl_FragColor = vec4(vColor, 1.0);' : ''}
+                                ${shaderType === 'Fire' ? 'float flicker = sin(time * 5.0 + vY * 0.2) * 0.2 + 0.8; vec3 fireColor = mix(vec3(1.0, 0.2, 0.0), vec3(1.0, 0.8, 0.0), (vY + 5.0) / 10.0); gl_FragColor = vec4(vColor * fireColor * flicker, 1.0);' : ''}
+                            }
+                        `;
+                    }
+
+                    const material = new THREE.ShaderMaterial({
+                        uniforms: {
+                            time: { value: 0.0 },
+                            ...(videoMode ? { videoTexture: { value: videoTexture } } : {})
+                        },
+                        vertexShader: vertexShader,
+                        fragmentShader: fragmentShader,
+                        ...(videoMode ? {} : { vertexColors: true }),
+                        side: THREE.DoubleSide
+                    });
+                    materials.push(material);
+
+                    const xOff = (maxWidth - data.width) / 2;
+                    const zOff = (maxDepth - data.height) / 2;
+                    const verts = [];
+                    const cols = [];
+                    const uvs = [];
+                    const shouldPerturb = (i > 0 && offset < 6 && !fillThis);
+                    data.points.forEach((pos, j) => {
+                        const px = shouldPerturb ? Math.random() * 3 - 1.5 : 0;
+                        const py = shouldPerturb ? Math.random() * 3 - 1.5 : 0;
+                        const pz = shouldPerturb ? Math.random() * 3 - 1.5 : 0;
+                        verts.push(pos[0] + xOff + px, pos[1] + currentY + py, pos[2] + zOff + pz);
+                        cols.push(...data.colors[j]);
+                        if (videoMode) {
+                            uvs.push(...data.uvs[j]);
+                        }
+                    });
+                    const geometry = new THREE.BufferGeometry();
+                    geometry.addAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+                    if (videoMode) {
+                        geometry.addAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
+                    } else {
+                        geometry.addAttribute('color', new THREE.BufferAttribute(new Float32Array(cols), 3));
+                    }
+                    
+                    if (fillThis) {
+                        const indices = [];
+                        for (let y = 0; y < data.height - 1; y++) {
+                            for (let x = 0; x < data.width - 1; x++) {
+                                const a = y * data.width + x;
+                                const b = y * data.width + x + 1;
+                                const c = (y + 1) * data.width + x + 1;
+                                const d = (y + 1) * data.width + x;
+                                indices.push(a, b, c);
+                                indices.push(a, c, d);
+                            }
+                        }
+                        if (doubleSided) {
+                            const offset = data.originalCount;
+                            for (let y = 0; y < data.height - 1; y++) {
+                                for (let x = 0; x < data.width - 1; x++) {
+                                    const a = y * data.width + x + offset;
+                                    const b = y * data.width + x + 1 + offset;
+                                    const c = (y + 1) * data.width + x + 1 + offset;
+                                    const d = (y + 1) * data.width + x + offset;
+                                    // Reverse winding for back side
+                                    indices.push(a, c, b);
+                                    indices.push(a, d, c);
+                                }
+                            }
+                        }
+                        geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
+                        const mesh = new THREE.Mesh(geometry, material);
+                        towerGroup.add(mesh);
+                    } else {
+                        const points = new THREE.Points(geometry, material);
+                        towerGroup.add(points);
+                    }
+                    
+                    currentY += offset;
+                }
+                cloudGroup.add(towerGroup);
+                const totalHeight = currentY - offset + 5;
+                dronePos = new THREE.Vector3(maxWidth / 2 + 50, totalHeight / 2, 0);
+                droneLook = new THREE.Vector3(0, totalHeight / 2, 0);
+                tilingThreshold = maxDepth; // Tile based on image height in z
+            }
+
+            // Add FlyControls to drone
+            const clock = new THREE.Clock();
+            const controls = new THREE.FlyControls(drone, renderer.domElement);
+            controls.movementSpeed = 50;
+            controls.rollSpeed = Math.PI / 24;
+            controls.autoForward = false;
+            controls.dragToLook = true;
+
+            drone.position.copy(dronePos);
+            drone.lookAt(droneLook);
+
+            let time = 0;
+            nextSpawnTime = time + 5;
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key === ' ') {
+                    e.preventDefault();
+                    shootFireball(drone, fireballs, new THREE.Vector3(1,1,1)); // player color tint white
+                }
+            });
+
+            function shootFireball(shooter, fireballArray, colorTint) {
+                const size = parseFloat(document.getElementById('fireballSize').value);
+                const speed = parseFloat(document.getElementById('fireballSpeed').value);
+                const fadeTime = parseFloat(document.getElementById('fireballFadeTime').value);
+
+                const geometry = new THREE.PlaneGeometry(size, size);
+                const uniforms = {
+                    time: { value: time },
+                    fireballTime: { value: 0 },
+                    fadeTime: { value: fadeTime },
+                    lightIntensity: { value: lightIntensity },
+                    glowStrength: { value: glowStrength },
+                    glowThickness: { value: glowThickness },
+                    fireballParticleCount: { value: fireballParticleCount },
+                    fireballParticleSize: { value: fireballParticleSize },
+                    spatialDustIntensity: { value: spatialDustIntensity },
+                    fireballParticleGravity: { value: fireballParticleGravity },
+                    fireballParticleLifetime: { value: fireballParticleLifetime },
+                    fireballParticleVelocity: { value: fireballParticleVelocity },
+                    fireballVariation: { value: fireballVariation },
+                    plasmaArcIntensity: { value: plasmaArcIntensity },
+                    plasmaArcLifetime: { value: plasmaArcLifetime },
+                    flowField: { value: new THREE.Vector2(0, 0) },
+                    fireballRadius: { value: size / 2 },
+                    colorTint: { value: colorTint }
+                };
+                const material = new THREE.ShaderMaterial({
+                    uniforms,
+                    vertexShader: fireballVertexShader,
+                    fragmentShader: fireballFragmentShader,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+                const plane = new THREE.Mesh(geometry, material);
+                const direction = new THREE.Vector3();
+                shooter.getWorldDirection(direction);
+                plane.position.copy(shooter.position).add(direction.clone().multiplyScalar(5));
+                plane.velocity = direction.clone().multiplyScalar(speed);
+                plane.startTime = time;
+                plane.fadeTime = fadeTime;
+                scene.add(plane);
+                fireballArray.push(plane);
+                materials.push(material);
+            }
+
+            function createExplosionParticle(position, velocity, colorTint, size, fadeTime) {
+                const geometry = new THREE.PlaneGeometry(size, size);
+                const uniforms = {
+                    time: { value: time },
+                    fireballTime: { value: 0 },
+                    fadeTime: { value: fadeTime },
+                    lightIntensity: { value: lightIntensity },
+                    glowStrength: { value: glowStrength },
+                    glowThickness: { value: glowThickness },
+                    fireballParticleCount: { value: fireballParticleCount },
+                    fireballParticleSize: { value: fireballParticleSize },
+                    spatialDustIntensity: { value: spatialDustIntensity },
+                    fireballParticleGravity: { value: fireballParticleGravity },
+                    fireballParticleLifetime: { value: fireballParticleLifetime },
+                    fireballParticleVelocity: { value: fireballParticleVelocity },
+                    fireballVariation: { value: fireballVariation },
+                    plasmaArcIntensity: { value: plasmaArcIntensity },
+                    plasmaArcLifetime: { value: plasmaArcLifetime },
+                    flowField: { value: new THREE.Vector2(0, 0) },
+                    fireballRadius: { value: size / 2 },
+                    colorTint: { value: colorTint }
+                };
+                const material = new THREE.ShaderMaterial({
+                    uniforms,
+                    vertexShader: fireballVertexShader,
+                    fragmentShader: fireballFragmentShader,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+                const plane = new THREE.Mesh(geometry, material);
+                plane.position.copy(position);
+                plane.velocity = velocity;
+                plane.startTime = time;
+                plane.fadeTime = fadeTime;
+                materials.push(material);
+                return plane;
+            }
+
+            function spawnEnemy() {
+                const {drone: enemyDrone, propMeshes, propMaterials, bodyMaterial, armMaterials} = createEnemyDroneModel();
+                const direction = new THREE.Vector3();
+                drone.getWorldDirection(direction);
+                enemyDrone.position.copy(drone.position).add(direction.multiplyScalar(500 + Math.random() * 500));
+                enemyDrone.position.x += (Math.random() - 0.5) * 200;
+                enemyDrone.position.y += (Math.random() - 0.5) * 200;
+                enemyDrone.lookAt(drone.position);
+                enemyDrone.lastShootTime = time + Math.random() * 2;
+                scene.add(enemyDrone);
+                enemies.push(enemyDrone);
+                materials.push(...propMaterials);
+                materials.push(bodyMaterial);
+                materials.push(...armMaterials);
+            }
+
+            function createExplosion(position, isElectric = false) {
+                const size = 10;
+                const geometry = new THREE.SphereGeometry(size, 32, 32);
+                const uniforms = {
+                    time: { value: time },
+                    explosionTime: { value: 0 },
+                    isElectric: { value: isElectric }
+                };
+                const material = new THREE.ShaderMaterial({
+                    uniforms,
+                    vertexShader: explosionVertexShader,
+                    fragmentShader: explosionFragmentShader,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending
+                });
+                const sphere = new THREE.Mesh(geometry, material);
+                sphere.position.copy(position);
+                sphere.startTime = time;
+                scene.add(sphere);
+                explosions.push(sphere);
+                materials.push(material);
+
+                // Add particles
+                for (let i = 0; i < 50; i++) {
+                    const direction = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+                    const particleSpeed = 50 + Math.random() * 100;
+                    const velocity = direction.multiplyScalar(particleSpeed);
+                    const particleSize = 2 + Math.random() * 3;
+                    const particleFade = 0.5 + Math.random() * 1;
+                    const particle = createExplosionParticle(position, velocity, new THREE.Vector3(1, 0.5, 0), particleSize, particleFade);
+                    scene.add(particle);
+                    explosionParticles.push(particle);
+                }
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const delta = clock.getDelta();
+                controls.update(delta);
+                time += delta;
+                materials.forEach(mat => {
+                    mat.uniforms.time.value = time;
+                });
+                if (videoMode) {
+                    videoTexture.needsUpdate = true;
+                }
+
+                // Spin propellers
+                propMeshes.forEach(mesh => {
+                    mesh.rotation.z += 0.2;
+                });
+
+                if (!planet) {
+                    // Add new tower if camera has advanced enough in z
+                    if (camera.position.z < lastZ - tilingThreshold) {
+                        const newTower = towerGroup.clone();
+                        newTower.position.z = lastZ - tilingThreshold;
+                        cloudGroup.add(newTower);
+                        lastZ = newTower.position.z;
+                    }
+                }
+
+                if (time > nextSpawnTime) {
+                    spawnEnemy();
+                    nextSpawnTime = time + 5 + Math.random() * 5;
+                }
+
+                enemies.forEach(enemy => {
+                    const direction = new THREE.Vector3().subVectors(drone.position, enemy.position).normalize();
+                    enemy.position.add(direction.multiplyScalar(delta * enemySpeed));
+                    enemy.lookAt(drone.position);
+                    if (time > enemy.lastShootTime) {
+                        shootFireball(enemy, enemyFireballs, new THREE.Vector3(1, 0.5, 0.5)); // red tint
+                        enemy.lastShootTime = time + 2 + Math.random() * 2;
+                    }
+                });
+
+                // Update player fireballs and check collisions with enemies
+                for (let i = fireballs.length - 1; i >= 0; i--) {
+                    const fb = fireballs[i];
+                    fb.position.add(fb.velocity.clone().multiplyScalar(delta));
+                    fb.lookAt(camera.position);
+                    fb.material.uniforms.fireballTime.value = time - fb.startTime;
+
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const enemy = enemies[j];
+                        const dist = fb.position.distanceTo(enemy.position);
+                        if (dist < 10) {
+                            createExplosion(fb.position.clone(), false);
+                            scene.remove(fb);
+                            fireballs.splice(i, 1);
+                            scene.remove(enemy);
+                            enemies.splice(j, 1);
+                            break;
+                        }
+                    }
+
+                    if (time - fb.startTime > fb.fadeTime) {
+                        scene.remove(fb);
+                        fireballs.splice(i, 1);
+                    }
+                }
+
+                // Update enemy fireballs and check collisions with player
+                for (let i = enemyFireballs.length - 1; i >= 0; i--) {
+                    const fb = enemyFireballs[i];
+                    fb.position.add(fb.velocity.clone().multiplyScalar(delta));
+                    fb.lookAt(camera.position);
+                    fb.material.uniforms.fireballTime.value = time - fb.startTime;
+
+                    const dist = fb.position.distanceTo(drone.position);
+                    if (dist < 10) {
+                        createExplosion(drone.position.clone(), true);
+                        scene.remove(fb);
+                        enemyFireballs.splice(i, 1);
+                    }
+
+                    if (time - fb.startTime > fb.fadeTime) {
+                        scene.remove(fb);
+                        enemyFireballs.splice(i, 1);
+                    }
+                }
+
+                // Update explosion particles
+                for (let i = explosionParticles.length - 1; i >= 0; i--) {
+                    const particle = explosionParticles[i];
+                    particle.position.add(particle.velocity.clone().multiplyScalar(delta));
+                    particle.lookAt(camera.position);
+                    particle.material.uniforms.fireballTime.value = time - particle.startTime;
+                    if (time - particle.startTime > particle.fadeTime) {
+                        scene.remove(particle);
+                        explosionParticles.splice(i, 1);
+                    }
+                }
+
+                // Update explosions
+                for (let i = explosions.length - 1; i >= 0; i--) {
+                    const exp = explosions[i];
+                    const et = time - exp.startTime;
+                    exp.material.uniforms.explosionTime.value = et;
+                    exp.scale.set(1 + et * 5, 1 + et * 5, 1 + et * 5);
+                    if (et > 1) {
+                        scene.remove(exp);
+                        explosions.splice(i, 1);
+                    }
+                }
+
+                // Update camera to follow drone (third-person view)
+                const relativeCameraOffset = new THREE.Vector3(0, 5, -20); // Position behind and above the drone
+                const cameraOffset = relativeCameraOffset.applyQuaternion(drone.quaternion).add(drone.position);
+                camera.position.copy(cameraOffset);
+                camera.lookAt(drone.position);
+
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Add event listeners for sliders
+            document.getElementById('lightIntensity').addEventListener('input', (e) => {
+                lightIntensity = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.lightIntensity.value = lightIntensity;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.lightIntensity.value = lightIntensity;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.lightIntensity.value = lightIntensity;
+                });
+            });
+            document.getElementById('glowStrength').addEventListener('input', (e) => {
+                glowStrength = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.glowStrength.value = glowStrength;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.glowStrength.value = glowStrength;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.glowStrength.value = glowStrength;
+                });
+            });
+            document.getElementById('glowThickness').addEventListener('input', (e) => {
+                glowThickness = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.glowThickness.value = glowThickness;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.glowThickness.value = glowThickness;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.glowThickness.value = glowThickness;
+                });
+            });
+            document.getElementById('fireballParticleCount').addEventListener('input', (e) => {
+                fireballParticleCount = parseInt(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleCount.value = fireballParticleCount;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleCount.value = fireballParticleCount;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.fireballParticleCount.value = fireballParticleCount;
+                });
+            });
+            document.getElementById('fireballParticleSize').addEventListener('input', (e) => {
+                fireballParticleSize = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleSize.value = fireballParticleSize;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleSize.value = fireballParticleSize;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.fireballParticleSize.value = fireballParticleSize;
+                });
+            });
+            document.getElementById('spatialDustIntensity').addEventListener('input', (e) => {
+                spatialDustIntensity = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.spatialDustIntensity.value = spatialDustIntensity;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.spatialDustIntensity.value = spatialDustIntensity;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.spatialDustIntensity.value = spatialDustIntensity;
+                });
+            });
+            document.getElementById('fireballParticleGravity').addEventListener('input', (e) => {
+                fireballParticleGravity = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleGravity.value = fireballParticleGravity;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleGravity.value = fireballParticleGravity;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.fireballParticleGravity.value = fireballParticleGravity;
+                });
+            });
+            document.getElementById('fireballParticleLifetime').addEventListener('input', (e) => {
+                fireballParticleLifetime = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleLifetime.value = fireballParticleLifetime;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleLifetime.value = fireballParticleLifetime;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.fireballParticleLifetime.value = fireballParticleLifetime;
+                });
+            });
+            document.getElementById('fireballParticleVelocity').addEventListener('input', (e) => {
+                fireballParticleVelocity = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleVelocity.value = fireballParticleVelocity;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.fireballParticleVelocity.value = fireballParticleVelocity;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.fireballParticleVelocity.value = fireballParticleVelocity;
+                });
+            });
+            document.getElementById('fireballVariation').addEventListener('input', (e) => {
+                fireballVariation = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.fireballVariation.value = fireballVariation;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.fireballVariation.value = fireballVariation;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.fireballVariation.value = fireballVariation;
+                });
+            });
+            document.getElementById('plasmaArcIntensity').addEventListener('input', (e) => {
+                plasmaArcIntensity = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.plasmaArcIntensity.value = plasmaArcIntensity;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.plasmaArcIntensity.value = plasmaArcIntensity;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.plasmaArcIntensity.value = plasmaArcIntensity;
+                });
+            });
+            document.getElementById('plasmaArcLifetime').addEventListener('input', (e) => {
+                plasmaArcLifetime = parseFloat(e.target.value);
+                fireballs.forEach(fb => {
+                    fb.material.uniforms.plasmaArcLifetime.value = plasmaArcLifetime;
+                });
+                enemyFireballs.forEach(fb => {
+                    fb.material.uniforms.plasmaArcLifetime.value = plasmaArcLifetime;
+                });
+                explosionParticles.forEach(p => {
+                    p.material.uniforms.plasmaArcLifetime.value = plasmaArcLifetime;
+                });
+            });
+            // Note: fireballSize, speed, fadeTime are used at shoot time, not updated after
+        }
+
+        // Main function
+        async function runPruner() {
+            if (!imageFiles.length) return alert('Upload at least one image or video');
+
+            const fillSpaces = document.getElementById('fillSpaces').checked;
+            const planet = document.getElementById('planet').checked;
+            const multiple = document.getElementById('multiple').checked;
+            const numPlanets = parseInt(document.getElementById('numPlanets').value) || 1;
+            const doubleSided = document.getElementById('doubleSided').checked;
+            const videoMode = document.getElementById('videoMode').checked;
+            let imageDatas;
+            if (videoMode) {
+                if (imageFiles.length !== 1 || !imageFiles[0].type.startsWith('video/')) {
+                    return alert('Upload exactly one video file for video mode');
+                }
+                imageDatas = [await getPointCloudFromVideo(imageFiles[0], fillSpaces && !fillFacesSelections[0], doubleSided)];
+            } else {
+                imageDatas = await Promise.all(imageFiles.map((file, i) => getPointCloudFromImage(file, fillSpaces && !fillFacesSelections[i], doubleSided)));
+            }
+            const numImages = imageDatas.length;
+            console.log(`Processing ${numImages} images`);
+
+            const offset = parseFloat(document.getElementById('offset').value) || 6;
+
+            // Pass array of image data to render
+            renderPrunedCloud(imageDatas, 'pruned-container', offset, shaderSelections, fillFacesSelections, planet, multiple, numPlanets, doubleSided, videoMode);
+        }
+    </script>
+</body>
+</html>
+
+

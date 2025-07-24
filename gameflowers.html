@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Rose Garden Jumper</title>
+  <style>
+    body, html {
+      margin: 0;
+      overflow: hidden;
+      height: 100%;
+      font-family: 'Arial', sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.85);
+      padding: 15px;
+      border-radius: 10px;
+      color: white;
+      z-index: 100;
+      max-height: 90vh;
+      overflow-y: auto;
+      width: 300px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    #controls h1 {
+      color: #ff66b2;
+      margin: 0 0 15px 0;
+      font-size: 1.5em;
+      text-align: center;
+    }
+    button {
+      background: linear-gradient(145deg, #ff66b2, #cc5288);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      padding: 10px 15px;
+      margin: 8px 0;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s;
+      width: 100%;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(255,102,178,0.4);
+    }
+    .slider-container {
+      margin: 12px 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #ffb3d9;
+      font-size: 0.9em;
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 8px;
+      -webkit-appearance: none;
+      background: linear-gradient(90deg, #ff66b2, #33001b);
+      border-radius: 10px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    }
+    input[type="color"] {
+      width: 100%;
+      height: 40px;
+      border: 2px solid #ff66b2;
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+    }
+    .value-display {
+      color: white;
+      font-size: 0.8em;
+      text-align: right;
+      margin-top: 3px;
+    }
+    #stats {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px 15px;
+      border-radius: 8px;
+      color: white;
+      font-family: monospace;
+      z-index: 100;
+    }
+    #loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 24px;
+      z-index: 1000;
+    }
+    #instructions {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 15px;
+      border-radius: 10px;
+      color: white;
+      z-index: 100;
+      max-width: 250px;
+    }
+    #score {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 15px;
+      border-radius: 10px;
+      color: white;
+      z-index: 100;
+      font-size: 1.2em;
+    }
+    .section-title {
+      color: #ff66b2;
+      font-weight: bold;
+      margin: 15px 0 5px 0;
+      border-bottom: 1px solid #ff66b2;
+      padding-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">Cultivating your rose garden...</div>
+  <div id="controls">
+    <h1>Rose Garden Jumper</h1>
+    
+    <button id="generate">Generate New Garden</button>
+    <button id="toggleStems">Toggle Stems</button>
+    <button id="toggleLeaves">Toggle Leaves</button>
+    <button id="animate">Start Animation</button>
+    
+    <div class="section-title">Garden Structure</div>
+    <div class="slider-container">
+      <label for="roseCount">Rose Count: <span id="roseCountValue">20</span></label>
+      <input type="range" id="roseCount" min="1" max="100" step="1" value="20">
+      
+      <label for="spiralTurns">Spiral Turns: <span id="spiralTurnsValue">3</span></label>
+      <input type="range" id="spiralTurns" min="1" max="10" step="0.5" value="3">
+      
+      <label for="spreadFactor">Spread Factor: <span id="spreadFactorValue">4</span></label>
+      <input type="range" id="spreadFactor" min="1" max="10" step="0.5" value="4">
+      
+      <label for="roseSize">Rose Size: <span id="roseSizeValue">1.0</span></label>
+      <input type="range" id="roseSize" min="0.1" max="3" step="0.1" value="1.0">
+    </div>
+    
+    <div class="section-title">Rose Details</div>
+    <div class="slider-container">
+      <label for="petalCount">Petal Count: <span id="petalCountValue">12</span></label>
+      <input type="range" id="petalCount" min="5" max="30" step="1" value="12">
+      
+      <label for="layerCount">Layer Count: <span id="layerCountValue">7</span></label>
+      <input type="range" id="layerCount" min="3" max="15" step="1" value="7">
+      
+      <label for="petalCurl">Petal Curl: <span id="petalCurlValue">0.5</span></label>
+      <input type="range" id="petalCurl" min="0" max="1" step="0.05" value="0.5">
+      
+      <label for="roseOpacity">Rose Opacity: <span id="roseOpacityValue">0.8</span></label>
+      <input type="range" id="roseOpacity" min="0.1" max="1" step="0.05" value="0.8">
+    </div>
+    
+    <div class="section-title">Petal Flutter</div>
+    <div class="slider-container">
+      <label for="flutterSpeed">Flutter Speed: <span id="flutterSpeedValue">8</span></label>
+      <input type="range" id="flutterSpeed" min="1" max="20" step="1" value="8">
+      
+      <label for="flutterIntensity">Flutter Intensity: <span id="flutterIntensityValue">0.5</span></label>
+      <input type="range" id="flutterIntensity" min="0.1" max="1" step="0.05" value="0.5">
+      
+      <label for="flutterOffset">Flutter Offset: <span id="flutterOffsetValue">0.2</span></label>
+      <input type="range" id="flutterOffset" min="0" max="1" step="0.05" value="0.2">
+    </div>
+    
+    <div class="section-title">Animation</div>
+    <div class="slider-container">
+      <label for="bloomSpeed">Bloom Speed: <span id="bloomSpeedValue">0.5</span></label>
+      <input type="range" id="bloomSpeed" min="0.1" max="2" step="0.1" value="0.5">
+      
+      <label for="windStrength">Wind Strength: <span id="windStrengthValue">0.2</span></label>
+      <input type="range" id="windStrength" min="0" max="1" step="0.05" value="0.2">
+    </div>
+    
+    <div class="section-title">Game Controls</div>
+    <div id="gameControls">
+      <p style="color: #ffb3d9; margin: 5px 0;">WASD/Arrows: Move</p>
+      <p style="color: #ffb3d9; margin: 5px 0;">Space: Jump</p>
+      <p style="color: #ffb3d9; margin: 5px 0;">Goal: Reach the golden rose!</p>
+    </div>
+  </div>
+  
+  <div id="score">Score: 0</div>
+  <div id="stats">Roses: 0 | Stems: 0 | Leaves: 0</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    // Main Three.js components
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050520);
+    
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
+    camera.position.set(0, 20, 50);
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+    
+    // Enhanced lighting
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    scene.add(ambientLight);
+    
+    const directionalLight = new THREE.DirectionalLight(0xffeedd, 1);
+    directionalLight.position.set(1, 1, 1);
+    scene.add(directionalLight);
+    
+    const backLight = new THREE.DirectionalLight(0x4466ff, 0.5);
+    backLight.position.set(-1, -1, -1);
+    scene.add(backLight);
+    
+    // Bloom effect (simulated)
+    const bloomLight = new THREE.PointLight(0xff66b2, 1, 50);
+    bloomLight.position.set(0, 5, 0);
+    scene.add(bloomLight);
+    
+    // Controls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 10;
+    controls.maxDistance = 500;
+    
+    // Garden elements
+    let roses = [];
+    let stems = [];
+    let leaves = [];
+    let showStems = true;
+    let showLeaves = true;
+    let isAnimating = false;
+    let animationTime = 0;
+    
+    // Game elements
+    let player;
+    let currentRoseIndex = 0;
+    let targetRoseIndex = 0;
+    let isJumping = false;
+    let jumpTime = 0;
+    const jumpDuration = 1;
+    const jumpHeight = 5;
+    let startPosition = new THREE.Vector3();
+    let targetPosition = new THREE.Vector3();
+    let score = 0;
+    let goldenRoseIndex = -1;
+    
+    // Keyboard state
+    const keys = {
+      ArrowUp: false,
+      ArrowDown: false,
+      ArrowLeft: false,
+      ArrowRight: false,
+      w: false,
+      a: false,
+      s: false,
+      d: false,
+      ' ': false
+    };
+    
+    // Configuration
+    const config = {
+      roseCount: 20,
+      spiralTurns: 3,
+      spreadFactor: 4,
+      roseSize: 1.0,
+      petalCount: 12,
+      layerCount: 7,
+      petalCurl: 0.5,
+      roseOpacity: 0.8,
+      flutterSpeed: 8,
+      flutterIntensity: 0.5,
+      flutterOffset: 0.2,
+      baseColor: new THREE.Color(0xff66b2),
+      tipColor: new THREE.Color(0xffffff),
+      stemColor: new THREE.Color(0x339933),
+      leafColor: new THREE.Color(0x22aa22),
+      bloomSpeed: 0.5,
+      windStrength: 0.2
+    };
+    
+    // Update display values for sliders
+    function updateSliderValues() {
+      Object.keys(config).forEach(key => {
+        const element = document.getElementById(`${key}Value`);
+        if (element) {
+          element.textContent = config[key];
+        }
+      });
+    }
+    
+    // Clean up objects from scene
+    function cleanUpScene(objects) {
+      objects.forEach(obj => {
+        if (obj instanceof THREE.Group) {
+          obj.children.forEach(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+        }
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+        scene.remove(obj);
+      });
+    }
+    
+    // Create player character
+    function createPlayer() {
+      const geometry = new THREE.SphereGeometry(1, 32, 32);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x00aaff,
+        emissive: 0x0066aa,
+        emissiveIntensity: 0.3,
+        roughness: 0.7,
+        metalness: 0.3
+      });
+      player = new THREE.Mesh(geometry, material);
+      player.castShadow = true;
+      scene.add(player);
+    }
+    
+    // Create a single rose with intricate petals
+    function createRose(position, scale, isGolden = false) {
+      const roseGroup = new THREE.Group();
+      roseGroup.position.copy(position);
+      roseGroup.scale.set(scale, scale, scale);
+      
+      // Create each layer of petals
+      for (let layer = 0; layer < config.layerCount; layer++) {
+        const layerScale = 0.2 + 0.8 * (layer / config.layerCount);
+        const layerHeight = 0.1 * layer;
+        
+        // Create petals for this layer
+        for (let i = 0; i < config.petalCount; i++) {
+          const angle = (i / config.petalCount) * Math.PI * 2;
+          const petal = createPetal(angle, layer, layerScale, isGolden);
+          roseGroup.add(petal);
+        }
+      }
+      
+      // Add rose center
+      const centerGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+      const centerMaterial = new THREE.MeshStandardMaterial({
+        color: isGolden ? 0xffcc00 : 0xffff00,
+        emissive: isGolden ? 0xffaa00 : 0xaa8800,
+        emissiveIntensity: isGolden ? 0.5 : 0.3,
+        roughness: 0.7
+      });
+      const center = new THREE.Mesh(centerGeometry, centerMaterial);
+      roseGroup.add(center);
+      
+      // Store original positions for animation
+      roseGroup.userData = {
+        basePosition: position.clone(),
+        petals: [],
+        bloomPhase: Math.random() * Math.PI * 2,
+        timeOffset: Math.random() * 1000,
+        isGolden: isGolden
+      };
+      
+      // Collect all petals
+      roseGroup.children.forEach(child => {
+        if (child.userData?.isPetal) {
+          roseGroup.userData.petals.push(child);
+          child.userData.basePosition = child.position.clone();
+          child.userData.baseRotation = child.rotation.clone();
+          child.userData.flutterPhase = Math.random() * Math.PI * 2;
+        }
+      });
+      
+      return roseGroup;
+    }
+    
+    // Create a single petal with organic shape
+    function createPetal(angle, layer, scale, isGolden = false) {
+      const petalShape = new THREE.Shape();
+      const curl = config.petalCurl;
+      const width = 0.8 * scale;
+      const height = 1.2 * scale;
+      
+      // Complex petal shape with curves
+      petalShape.moveTo(0, 0);
+      petalShape.bezierCurveTo(
+        width * 0.3, height * 0.2 * curl,
+        width * 0.7, height * 0.3 * curl,
+        width, height * 0.5
+      );
+      petalShape.bezierCurveTo(
+        width * 0.7, height * 0.7,
+        width * 0.3, height * 0.9,
+        0, height
+      );
+      petalShape.bezierCurveTo(
+        -width * 0.3, height * 0.9,
+        -width * 0.7, height * 0.7,
+        -width, height * 0.5
+      );
+      petalShape.bezierCurveTo(
+        -width * 0.7, height * 0.3 * curl,
+        -width * 0.3, height * 0.2 * curl,
+        0, 0
+      );
+      
+      // Extrude with thickness
+      const extrudeSettings = {
+        steps: 2,
+        depth: 0.05,
+        bevelEnabled: true,
+        bevelThickness: 0.02,
+        bevelSize: 0.04,
+        bevelOffset: 0,
+        bevelSegments: 3
+      };
+      
+      const geometry = new THREE.ExtrudeGeometry(petalShape, extrudeSettings);
+      
+      // Color gradient from base to tip
+      const colors = [];
+      const positionAttribute = geometry.attributes.position;
+      const vertex = new THREE.Vector3();
+      
+      for (let i = 0; i < positionAttribute.count; i++) {
+        vertex.fromBufferAttribute(positionAttribute, i);
+        const t = Math.min(1, vertex.y / height);
+        let baseColor = isGolden ? new THREE.Color(0xffcc00) : config.baseColor.clone();
+        let tipColor = isGolden ? new THREE.Color(0xffffaa) : config.tipColor.clone();
+        const color = baseColor.clone().lerp(tipColor, t);
+        colors.push(color.r, color.g, color.b);
+      }
+      
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      
+      const material = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: config.roseOpacity,
+        roughness: 0.7,
+        metalness: isGolden ? 0.5 : 0.1
+      });
+      
+      const petal = new THREE.Mesh(geometry, material);
+      
+      // Position and rotate the petal
+      const radius = 0.5 + layer * 0.3;
+      petal.position.set(
+        Math.cos(angle) * radius,
+        layer * 0.2,
+        Math.sin(angle) * radius
+      );
+      
+      petal.rotation.y = angle;
+      petal.rotation.z = -Math.PI / 8 + (Math.PI / 16) * (layer / config.layerCount);
+      
+      // Mark as petal for animation
+      petal.userData = {
+        isPetal: true,
+        angle: angle,
+        layer: layer,
+        flutterPhase: Math.random() * Math.PI * 2
+      };
+      
+      return petal;
+    }
+    
+    // Create a stem for the rose
+    function createStem(basePosition, height) {
+      const curve = new THREE.CubicBezierCurve3(
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, height * 0.3, 0),
+        new THREE.Vector3(0, height * 0.7, 0),
+        new THREE.Vector3(0, height, 0)
+      );
+      
+      const points = curve.getPoints(20);
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      
+      const material = new THREE.LineBasicMaterial({
+        color: config.stemColor,
+        linewidth: 2
+      });
+      
+      const stem = new THREE.Line(geometry, material);
+      stem.position.copy(basePosition);
+      
+      return stem;
+    }
+    
+    // Create leaves for the stem
+    function createLeaves(basePosition, height) {
+      const leafGroup = new THREE.Group();
+      leafGroup.position.copy(basePosition);
+      
+      // Create leaf shape
+      const leafShape = new THREE.Shape();
+      leafShape.moveTo(0, 0);
+      leafShape.bezierCurveTo(0.5, 0.2, 0.8, 0.8, 0, 1.5);
+      leafShape.bezierCurveTo(-0.8, 0.8, -0.5, 0.2, 0, 0);
+      
+      const extrudeSettings = {
+        steps: 2,
+        depth: 0.02,
+        bevelEnabled: true,
+        bevelThickness: 0.02,
+        bevelSize: 0.04,
+        bevelOffset: 0,
+        bevelSegments: 3
+      };
+      
+      const geometry = new THREE.ExtrudeGeometry(leafShape, extrudeSettings);
+      
+      const material = new THREE.MeshStandardMaterial({
+        color: config.leafColor,
+        side: THREE.DoubleSide,
+        roughness: 0.8
+      });
+      
+      // Create 2-4 leaves per stem
+      const leafCount = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < leafCount; i++) {
+        const leaf = new THREE.Mesh(geometry, material);
+        
+        // Position leaves along stem
+        const t = 0.2 + 0.6 * (i / leafCount);
+        const yPos = height * t;
+        
+        // Random angle and position
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 0.3 + Math.random() * 0.2;
+        
+        leaf.position.set(
+          Math.cos(angle) * distance,
+          yPos,
+          Math.sin(angle) * distance
+        );
+        
+        leaf.rotation.z = Math.PI / 4 + (Math.random() - 0.5) * Math.PI / 4;
+        leaf.rotation.y = angle;
+        
+        // Add some natural variation
+        leaf.scale.set(
+          0.5 + Math.random() * 0.5,
+          0.5 + Math.random() * 0.5,
+          1
+        );
+        
+        leaf.userData = {
+          isLeaf: true,
+          baseRotation: leaf.rotation.clone(),
+          timeOffset: Math.random() * 1000
+        };
+        
+        leafGroup.add(leaf);
+      }
+      
+      return leafGroup;
+    }
+    
+    // Generate the spiral rose garden
+    function generateGarden() {
+      // Clear previous elements
+      cleanUpScene(roses);
+      cleanUpScene(stems);
+      cleanUpScene(leaves);
+      
+      roses = [];
+      stems = [];
+      leaves = [];
+      
+      // Create spiral pattern
+      const radiusStep = config.spreadFactor;
+      const angleStep = (Math.PI * 2 * config.spiralTurns) / config.roseCount;
+      
+      for (let i = 0; i < config.roseCount; i++) {
+        // Spiral coordinates
+        const radius = radiusStep * Math.sqrt(i + 1) * 1.5;
+        const angle = angleStep * i;
+        const heightVariation = Math.sin(i * 0.3) * 3;
+        
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        const y = heightVariation;
+        
+        const position = new THREE.Vector3(x, y, z);
+        
+        // Create rose (make one golden)
+        const isGolden = i === Math.floor(config.roseCount / 2);
+        const roseScale = config.roseSize * (0.8 + Math.random() * 0.4);
+        const rose = createRose(position, roseScale, isGolden);
+        scene.add(rose);
+        roses.push(rose);
+        
+        if (isGolden) {
+          goldenRoseIndex = i;
+        }
+        
+        // Create stem (longer for higher roses)
+        const stemHeight = 3 + y * 0.5;
+        const stem = createStem(position, stemHeight);
+        scene.add(stem);
+        stems.push(stem);
+        
+        // Create leaves
+        const leafGroup = createLeaves(position, stemHeight);
+        scene.add(leafGroup);
+        leaves.push(leafGroup);
+      }
+      
+      // Position player on first rose
+      if (roses.length > 0) {
+        currentRoseIndex = 0;
+        targetRoseIndex = 0;
+        startPosition.copy(roses[currentRoseIndex].position);
+        startPosition.y += 2;
+        targetPosition.copy(startPosition);
+        
+        if (player) {
+          player.position.copy(startPosition);
+        }
+      }
+      
+      updateStats();
+      document.getElementById('loading').style.display = 'none';
+    }
+    
+    // Toggle stems visibility
+    function toggleStems() {
+      showStems = !showStems;
+      stems.forEach(stem => stem.visible = showStems);
+      updateStats();
+    }
+    
+    // Toggle leaves visibility
+    function toggleLeaves() {
+      showLeaves = !showLeaves;
+      leaves.forEach(leaf => leaf.visible = showLeaves);
+      updateStats();
+    }
+    
+    // Start/stop animation
+    function toggleAnimation() {
+      isAnimating = !isAnimating;
+      const button = document.getElementById('animate');
+      button.textContent = isAnimating ? 'Stop Animation' : 'Start Animation';
+      button.style.background = isAnimating 
+        ? 'linear-gradient(145deg, #ff3366, #cc0055)'
+        : 'linear-gradient(145deg, #ff66b2, #cc5288)';
+    }
+    
+    // Update stats display
+    function updateStats() {
+      document.getElementById('stats').textContent = 
+        `Roses: ${roses.length} | Stems: ${showStems ? stems.length : 0} | Leaves: ${showLeaves ? leaves.length : 0}`;
+      document.getElementById('score').textContent = `Score: ${score}`;
+    }
+    
+    // Bee-wing style fluttering function
+    function applyFlutter(petal, time) {
+      const flutterTime = time * config.flutterSpeed + petal.userData.flutterPhase;
+      const flutterWave = Math.sin(flutterTime * 10) * 0.5 + 0.5;
+      const flutterFactor = Math.sin(flutterTime) * config.flutterIntensity;
+      
+      const angleOffset = flutterWave * flutterFactor * 0.5;
+      const positionOffset = flutterFactor * 0.1 * (1 - petal.userData.layer / config.layerCount);
+      
+      const direction = petal.userData.angle % (Math.PI * 2) > Math.PI ? -1 : 1;
+      
+      petal.rotation.x = petal.userData.baseRotation.x + angleOffset * direction;
+      petal.rotation.z = petal.userData.baseRotation.z + angleOffset * 0.3;
+      petal.position.y = petal.userData.basePosition.y + positionOffset;
+    }
+    
+    // Find nearest rose in direction
+    function findTargetRose(direction) {
+      const currentPos = roses[currentRoseIndex].position;
+      let bestIndex = currentRoseIndex;
+      let bestDot = -Infinity;
+      
+      for (let i = 0; i < roses.length; i++) {
+        if (i === currentRoseIndex) continue;
+        
+        const dirToRose = new THREE.Vector3().subVectors(roses[i].position, currentPos).normalize();
+        const dot = dirToRose.dot(direction);
+        
+        if (dot > 0.3 && dot > bestDot) {
+          const distance = currentPos.distanceTo(roses[i].position);
+          if (distance < config.spreadFactor * 3) {
+            bestDot = dot;
+            bestIndex = i;
+          }
+        }
+      }
+      
+      return bestIndex;
+    }
+    
+    // Jump to target rose
+    function jumpToRose(targetIndex) {
+      if (isJumping || targetIndex === currentRoseIndex) return;
+      
+      isJumping = true;
+      jumpTime = 0;
+      startPosition.copy(player.position);
+      targetPosition.copy(roses[targetIndex].position);
+      targetPosition.y += 2;
+      targetRoseIndex = targetIndex;
+    }
+    
+    // Update player jump
+    function updatePlayerJump(deltaTime) {
+      if (!isJumping) return;
+      
+      jumpTime += deltaTime;
+      const t = Math.min(1, jumpTime / jumpDuration);
+      
+      // Quadratic ease-in-out
+      const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      
+      // Calculate position along jump arc
+      const jumpPos = new THREE.Vector3().lerpVectors(startPosition, targetPosition, easeT);
+      const arcHeight = jumpHeight * Math.sin(easeT * Math.PI);
+      jumpPos.y += arcHeight;
+      
+      player.position.copy(jumpPos);
+      
+      // Rotate player during jump
+      player.rotation.x = easeT * Math.PI * 2;
+      
+      // Check if jump completed
+      if (t >= 1) {
+        isJumping = false;
+        currentRoseIndex = targetRoseIndex;
+        
+        // Check if landed on golden rose
+        if (currentRoseIndex === goldenRoseIndex) {
+          score += 10;
+          updateStats();
+          
+          // Reset current golden rose
+          roses[goldenRoseIndex].userData.isGolden = false;
+          roses[goldenRoseIndex].children.forEach(child => {
+            if (child.userData?.isPetal) {
+              child.material.color.set(config.baseColor);
+              child.material.emissive.set(0x000000);
+            } else if (child instanceof THREE.Mesh) {
+              child.material.color.set(0xffff00);
+              child.material.emissive.set(0xaa8800);
+            }
+          });
+          
+          // Select new golden rose (not current one)
+          let newGoldenIndex;
+          do {
+            newGoldenIndex = Math.floor(Math.random() * roses.length);
+          } while (newGoldenIndex === currentRoseIndex);
+          
+          goldenRoseIndex = newGoldenIndex;
+          roses[goldenRoseIndex].userData.isGolden = true;
+          roses[goldenRoseIndex].children.forEach(child => {
+            if (child.userData?.isPetal) {
+              child.material.color.set(0xffcc00);
+              child.material.emissive.set(0xffaa00);
+            } else if (child instanceof THREE.Mesh) {
+              child.material.color.set(0xffcc00);
+              child.material.emissive.set(0xffaa00);
+            }
+          });
+        }
+      }
+    }
+    
+    // Handle keyboard input
+    function handleKeyboardInput(deltaTime) {
+      if (isJumping) return;
+      
+      const moveSpeed = 5 * deltaTime;
+      const direction = new THREE.Vector3();
+      
+      // Forward/backward
+      if (keys.ArrowUp || keys.w) direction.z -= 1;
+      if (keys.ArrowDown || keys.s) direction.z += 1;
+      
+      // Left/right
+      if (keys.ArrowLeft || keys.a) direction.x -= 1;
+      if (keys.ArrowRight || keys.d) direction.x += 1;
+      
+      // Normalize direction
+      if (direction.length() > 0) {
+        direction.normalize();
+        
+        // Get camera forward direction (ignore Y)
+        const cameraDirection = new THREE.Vector3();
+        camera.getWorldDirection(cameraDirection);
+        cameraDirection.y = 0;
+        cameraDirection.normalize();
+        
+        // Create rotation to align with camera
+        const angle = Math.atan2(cameraDirection.x, cameraDirection.z);
+        direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+        
+        // Find target rose in this direction
+        const targetIndex = findTargetRose(direction);
+        if (targetIndex !== currentRoseIndex) {
+          jumpToRose(targetIndex);
+        }
+      }
+      
+      // Jump
+      if (keys[' ']) {
+        // Find a random rose to jump to
+        let targetIndex;
+        do {
+          targetIndex = Math.floor(Math.random() * roses.length);
+        } while (targetIndex === currentRoseIndex);
+        
+        jumpToRose(targetIndex);
+      }
+    }
+    
+    // Animate the garden
+    function animateGarden(deltaTime) {
+      if (!isAnimating) return;
+      
+      animationTime += deltaTime * config.bloomSpeed;
+      
+      // Animate each rose
+      roses.forEach((rose, index) => {
+        // Gentle swaying motion
+        const swayPhase = animationTime * 0.5 + index * 0.1;
+        rose.position.x = rose.userData.basePosition.x + Math.sin(swayPhase) * 0.3 * config.windStrength;
+        rose.position.z = rose.userData.basePosition.z + Math.cos(swayPhase * 0.7) * 0.3 * config.windStrength;
+        
+        // Bloom animation
+        const bloomPhase = animationTime + index * 0.2;
+        const bloomFactor = Math.sin(bloomPhase) * 0.5 + 0.5;
+        
+        // Animate petals with fluttering
+        rose.userData.petals.forEach(petal => {
+          applyFlutter(petal, animationTime + rose.userData.timeOffset * 0.001);
+          
+          // Open/close petals with bloom effect
+          const openAmount = bloomFactor * (1 - petal.userData.layer / config.layerCount);
+          petal.position.y = petal.userData.basePosition.y + openAmount * 0.5;
+          
+          // Additional gentle movement
+          const petalPhase = bloomPhase + petal.userData.angle;
+          petal.rotation.z = petal.userData.baseRotation.z + Math.sin(petalPhase) * 0.1;
+        });
+      });
+      
+      // Animate leaves
+      leaves.forEach(leafGroup => {
+        leafGroup.children.forEach(leaf => {
+          if (leaf.userData?.isLeaf) {
+            const leafPhase = animationTime + leafGroup.position.x * 0.1 + leaf.userData.timeOffset * 0.001;
+            leaf.rotation.z = leaf.userData.baseRotation.z + Math.sin(leafPhase) * 0.2 * config.windStrength;
+            
+            // Add slight flutter to leaves
+            const flutter = Math.sin(leafPhase * 8) * 0.05 * config.windStrength;
+            leaf.rotation.x = leaf.userData.baseRotation.x + flutter;
+          }
+        });
+      });
+      
+      // Animate bloom light
+      bloomLight.intensity = Math.sin(animationTime * 2) * 0.5 + 0.5;
+    }
+    
+    // Initialize the application
+    function init() {
+      // Event listeners for UI controls
+      document.getElementById('generate').addEventListener('click', generateGarden);
+      document.getElementById('toggleStems').addEventListener('click', toggleStems);
+      document.getElementById('toggleLeaves').addEventListener('click', toggleLeaves);
+      document.getElementById('animate').addEventListener('click', toggleAnimation);
+      
+      // Keyboard event listeners
+      window.addEventListener('keydown', (e) => {
+        if (keys.hasOwnProperty(e.key)) {
+          keys[e.key] = true;
+        }
+      });
+      
+      window.addEventListener('keyup', (e) => {
+        if (keys.hasOwnProperty(e.key)) {
+          keys[e.key] = false;
+        }
+      });
+      
+      // Configuration sliders
+      Object.keys(config).forEach(key => {
+        const slider = document.getElementById(key);
+        if (slider) {
+          slider.addEventListener('input', (e) => {
+            config[key] = parseFloat(e.target.value);
+            updateSliderValues();
+          });
+        }
+      });
+      
+      // Handle window resize
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      
+      // Initialize slider values
+      updateSliderValues();
+      
+      // Create player and garden
+      createPlayer();
+      generateGarden();
+      
+      // Start animation loop
+      animate();
+    }
+    
+    // Animation loop
+    let lastTime = 0;
+    function animate(currentTime = 0) {
+      requestAnimationFrame(animate);
+      
+      const deltaTime = (currentTime - lastTime) / 1000;
+      lastTime = currentTime;
+      
+      controls.update();
+      animateGarden(deltaTime);
+      handleKeyboardInput(deltaTime);
+      updatePlayerJump(deltaTime);
+      
+      // Make camera follow player
+      if (player) {
+        const targetPos = new THREE.Vector3();
+        targetPos.copy(player.position);
+        targetPos.y += 5;
+        targetPos.z += 10;
+        
+        camera.position.lerp(targetPos, deltaTime * 2);
+        camera.lookAt(player.position);
+      }
+      
+      renderer.render(scene, camera);
+    }
+    
+    // Start the application
+    init();
+    
+    // Hide loading screen after a short delay
+    setTimeout(() => {
+      document.getElementById('loading').style.display = 'none';
+    }, 500);
+  </script>
+</body>
+</html>
